@@ -1,0 +1,429 @@
+
+import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { Scene, Character, ChatMessage, AIResponse, WorldInfo, Chapter, StoryLogEntry, SceneCharacterConfig } from "../types";
+
+export const EMOTION_ENUM = ['idle', 'happy', 'angry', 'thoughtful', 'shy', 'sad', 'shocked', 'worried', 'lustful'] as const;
+
+function buildResponseSchema(activeCharacterIds: string[]): Schema {
+  // 'narrator' and 'system' always allowed for narration and system messages
+  const allowedCharacterIds = Array.from(new Set([...activeCharacterIds, 'narrator', 'system']));
+  
+  return {
+    type: Type.OBJECT,
+    properties: {
+      characterResponses: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            characterId: {
+              type: Type.STRING,
+              enum: allowedCharacterIds,
+              description: "ID of the speaking character. Must be one of the active characters in the scene, or 'narrator' for descriptive narration.",
+            },
+            emotion: {
+              type: Type.STRING,
+              enum: [...EMOTION_ENUM],
+              description: "Emotion of the character during this line. Use 'idle' for normal/neutral state.",
+            },
+            text: { type: Type.STRING, description: "The dialogue line or narration." },
+          },
+          required: ["characterId", "text"],
+        },
+        description: "List of responses from characters in the scene. Can be empty if only narrator speaks or no one speaks.",
+      },
+      relationshipUpdates: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            characterId: {
+              type: Type.STRING,
+              enum: allowedCharacterIds,
+              description: "ID of the character whose relationship changed.",
+            },
+            change: { type: Type.NUMBER, description: "Numeric change (e.g., +5, -10)." },
+            reason: { type: Type.STRING, description: "Short reason for the change (e.g., 'Player was rude')." }
+          },
+          required: ["characterId", "change", "reason"]
+        },
+        description: "Optional list of relationship changes triggered by player's last action."
+      },
+      sceneGoalReached: {
+        type: Type.BOOLEAN,
+        description: "True ONLY if the specific win condition is met. If no win condition is provided, this MUST be false.",
+      },
+      sceneTransitionReason: {
+        type: Type.STRING,
+        description: "Brief explanation if the scene is ending.",
+      },
+    },
+    required: ["characterResponses", "sceneGoalReached"],
+  };
+}
+
+// Schema for Scene Summarization
+const SUMMARY_SCHEMA: Schema = {
+    type: Type.OBJECT,
+    properties: {
+        summary: { type: Type.STRING, description: "A concise summary (3-5 sentences) of the events, key decisions, and outcome of the scene." }
+    },
+    required: ["summary"]
+};
+
+function buildSceneGenSchema(allCharacterIds: string[]): Schema {
+  return {
+    type: Type.OBJECT,
+    properties: {
+      name: { type: Type.STRING, description: "Creative name for the scene." },
+      locationName: { type: Type.STRING, description: "Where this takes place (e.g. 'The Rusty Tavern')." },
+      description: { type: Type.STRING, description: "Visible description for the player." },
+      goal: { type: Type.STRING, description: "Objective for the player (or empty if it's a chill scene)." },
+      aiInstructions: { type: Type.STRING, description: "Hidden instructions for the AI on how to play the characters." },
+      sensoryDetails: { type: Type.STRING, description: "Smells, sounds, lighting." },
+      environmentDetails: { type: Type.STRING, description: "Physical layout description." },
+      characters: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            characterId: { 
+              type: Type.STRING, 
+              enum: allCharacterIds,
+              description: "Must be one of the provided Character IDs." 
+            },
+            roleInScene: { type: Type.STRING, description: "What is this character doing here?" }
+          },
+          required: ["characterId", "roleInScene"]
+        }
+      }
+    },
+    required: ["name", "locationName", "description", "goal", "aiInstructions", "characters"]
+  };
+}
+
+export const generateSceneSummary = async (
+    scene: Scene,
+    characters: Character[],
+    history: ChatMessage[]
+): Promise<string> => {
+    if (!process.env.API_KEY) throw new Error("API Key not found");
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+    // Identify characters by name for the prompt
+    const charNames = scene.characters
+        .map(sc => characters.find(c => c.id === sc.characterId)?.name)
+        .filter(Boolean)
+        .join(", ");
+
+    const chatLog = history.map(msg => {
+        const senderName = msg.sender === 'user' ? 'Player' : 
+                           msg.sender === 'system' ? 'System' : 
+                           characters.find(c => c.id === msg.characterId)?.name || 'Unknown';
+        return `${senderName}: ${msg.text}`;
+    }).join('\n');
+
+    const prompt = `
+        Task: Summarize the following Visual Novel scene for a persistent Story Log.
+        Scene Name: ${scene.name}
+        Location: ${scene.locationName}
+        Characters Present: ${charNames}
+
+        Conversation History:
+        ${chatLog}
+
+        Instructions:
+        - Write a concise summary (3-5 sentences).
+        - Focus on what happened, what information was revealed, and any major decisions made by the player.
+        - Write in past tense.
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-3-flash-preview",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: SUMMARY_SCHEMA,
+            }
+        });
+        const json = JSON.parse(response.text || "{}");
+        return json.summary || "No summary available.";
+    } catch (e) {
+        console.error("Summary Generation Failed", e);
+        return "Summary generation failed.";
+    }
+};
+
+export const generateAutoScene = async (
+    allCharacters: Character[],
+    storyLog: StoryLogEntry[],
+    worldInfo: WorldInfo,
+    customPrompt?: string
+): Promise<Partial<Scene>> => {
+    if (!process.env.API_KEY) throw new Error("API Key not found");
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+    const charList = allCharacters.map(c => `ID: ${c.id} | Name: ${c.name} | Role: ${c.defaultDescription}`).join('\n');
+    
+    const recentEvents = storyLog.slice(-5).map(e => `[${e.sceneName}] ${e.summary}`).join('\n');
+
+    const prompt = `
+        Task: Create a NEW scene for a Visual Novel RPG.
+        
+        WORLD SETTING:
+        ${worldInfo.description}
+        
+        AVAILABLE ASSETS (CHARACTERS):
+        ${charList}
+        
+        RECENT STORY EVENTS (Context):
+        ${recentEvents || "The story is just beginning."}
+        
+        ${customPrompt ? `\nUSER'S CUSTOM REQUEST/PROMPT FOR THIS SCENE:\n${customPrompt}\n` : ""}
+
+        INSTRUCTIONS:
+        1. Design a scene that logically follows the recent events OR creates a "Quality of Life" bonding moment / side quest.
+        2. DO NOT invent new characters. Use ONLY the IDs provided in the list above.
+        3. Pick 1-3 characters to include.
+        4. Define a clear location, description, and goal.
+        5. If it's a chill scene, the goal can be "Chat with X" or "Relax".
+        6. Provide hidden AI instructions on how the characters should behave in this specific context.
+        7. The output must be valid JSON matching the schema.
+        ${customPrompt ? '8. **VERY IMPORTANT**: You MUST honor the USER\'S CUSTOM REQUEST specified above when designing this scene.' : ''}
+    `;
+
+    try {
+        const allCharacterIds = allCharacters.map(c => c.id);
+        const sceneGenSchema = buildSceneGenSchema(allCharacterIds);
+
+        // Timeout mechanism to prevent infinite hang
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Gemini generateContent timed out after 60s")), 60000));
+        const response = await Promise.race([
+          ai.models.generateContent({
+              model: "gemini-3-flash-preview",
+              contents: prompt,
+              config: {
+                  responseMimeType: "application/json",
+                  responseSchema: sceneGenSchema,
+                  temperature: 1.1 // Slightly higher creativity
+              }
+          }),
+          timeoutPromise
+        ]) as any;
+        const json = JSON.parse(response.text || "{}");
+        return json;
+    } catch (e) {
+        console.error("Scene Generation Failed", e);
+        throw e;
+    }
+};
+
+export const generateGameTurn = async (
+  currentInput: string,
+  history: ChatMessage[],
+  scene: Scene,
+  allCharacters: Character[],
+  worldInfo?: WorldInfo,
+  chapter?: Chapter,
+  storyLog: StoryLogEntry[] = [] // New Parameter
+): Promise<AIResponse> => {
+  if (!process.env.API_KEY) {
+    throw new Error("API Key not found");
+  }
+
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+  // 1. Construct the Context
+  const activeChars = scene.characters.map(sc => {
+    const baseChar = allCharacters.find(c => c.id === sc.characterId);
+    if (!baseChar) return null;
+
+    // --- Format Relationship Logic if enabled ---
+    let relContext = '';
+    if (baseChar.relationship && baseChar.relationship.enabled) {
+        const rc = baseChar.relationship;
+        // Sort thresholds descending to find the current active one
+        const activeThreshold = [...rc.thresholds]
+            .sort((a,b) => b.valueStart - a.valueStart)
+            .find(t => rc.currentValue >= t.valueStart);
+
+        relContext = `
+        **RELATIONSHIP SYSTEM ACTIVE**
+        - Current Value: ${rc.currentValue} (Start: ${rc.startValue})
+        - Current Status/Behavior: ${activeThreshold ? `${activeThreshold.label}: ${activeThreshold.description}` : 'Normal'}
+        
+        **RULES FOR CHANGING VALUE (Evaluate User's Action):**
+        ${rc.triggers.map(t => `- ${t.description}: ${t.valueChange > 0 ? '+' : ''}${t.valueChange}`).join('\n')}
+        
+        **THRESHOLDS:**
+        ${rc.thresholds.map(t => `- >= ${t.valueStart} (${t.label}): ${t.description}`).join('\n')}
+
+        INSTRUCTION: If the player's current action matches a trigger, include a 'relationshipUpdates' entry in the JSON response.
+        `;
+    } else {
+        relContext = `Relation to Player: ${baseChar.playerRelation || 'Neutral'}`;
+    }
+
+    return {
+      name: baseChar.name,
+      id: baseChar.id,
+      basePersona: baseChar.defaultDescription,
+      lore: baseChar.lore || '',
+      relContext: relContext,
+      sceneRole: sc.roleInScene
+    };
+  }).filter(Boolean);
+
+  // Handle Logic for empty goals
+  const hasSpecificGoal = scene.goal && scene.goal.trim().length > 0;
+  
+  const goalInstruction = hasSpecificGoal 
+    ? `WIN CONDITION / GOAL: ${scene.goal}
+       CRITICAL: Evaluate if this specific "WIN CONDITION" has been met by the user's actions or words. If yes, set 'sceneGoalReached' to true.`
+    : `WIN CONDITION: NONE / SANDBOX. 
+       CRITICAL: This is an open-ended roleplay. Do NOT set 'sceneGoalReached' to true under any circumstances. The player will exit manually when they are done.`;
+
+  // --- World Building Context ---
+  let worldContext = '';
+  if (worldInfo) {
+    worldContext += `WORLD VIEW / GLOBAL SETTING:\n${worldInfo.description}\n\n`;
+    
+    // Faction-Scoping: Wenn die Szene relevante Fraktionen explizit auswählt, nur diese laden.
+    // Fallback: alle Fraktionen (für Backwards-Kompatibilität mit alten Szenen ohne Auswahl).
+    const factionsToLoad = scene.relevantFactionIds && scene.relevantFactionIds.length > 0
+      ? worldInfo.factions?.filter(f => scene.relevantFactionIds!.includes(f.id))
+      : worldInfo.factions;
+
+    if (factionsToLoad && factionsToLoad.length > 0) {
+      worldContext += `RELEVANT FACTIONS FOR THIS SCENE:\n${factionsToLoad.map(f => `- ${f.name}: ${f.description}`).join('\n')}\n\n`;
+    }
+    
+    // Location-Scoping: gleiches Prinzip
+    const locationsToLoad = scene.relevantLocationIds && scene.relevantLocationIds.length > 0
+      ? worldInfo.loreLocations?.filter(l => scene.relevantLocationIds!.includes(l.id))
+      : worldInfo.loreLocations;
+
+    if (locationsToLoad && locationsToLoad.length > 0) {
+      worldContext += `RELEVANT LOCATIONS FOR THIS SCENE:\n${locationsToLoad.map(l => `- ${l.name}: ${l.description}`).join('\n')}\n\n`;
+    }
+
+    if (worldInfo.systemInstruction) {
+        worldContext += `SYSTEM DIRECTIVES (Must Follow):\n${worldInfo.systemInstruction}\n\n`;
+    }
+  }
+
+  const chapterContext = chapter 
+    ? `CURRENT CHAPTER: ${chapter.name}
+       CHAPTER CONTEXT: ${chapter.description}`
+    : '';
+
+  // --- STORY HISTORY CONTEXT ---
+  let historyContext = '';
+  if (storyLog && storyLog.length > 0) {
+      historyContext = `
+      PREVIOUS STORY EVENTS (Chronological Order):
+      ${storyLog.map(entry => `[Scene: ${entry.sceneName} @ ${entry.locationName}] ${entry.summary}`).join('\n')}
+      
+      INSTRUCTION: Use this history to maintain consistency. Refer to past events if relevant.
+      `;
+  }
+
+  const aiHiddenInstructions = scene.aiInstructions 
+    ? `HIDDEN GAME MASTER INSTRUCTIONS (Do not reveal to player): 
+       ${scene.aiInstructions}` 
+    : '';
+
+  const aiSensoryDetails = scene.sensoryDetails
+    ? `SENSORY DETAILS (Atmosphere, Smells, Sounds):
+       ${scene.sensoryDetails}`
+    : '';
+
+  const aiEnvironmentLayout = scene.environmentDetails
+    ? `INTERNAL ENVIRONMENT & LAYOUT (Room structure, visible objects, architecture):
+       ${scene.environmentDetails}`
+    : '';
+
+  const systemPrompt = `
+    You are the Game Master and Engine for a Visual Novel.
+    
+    ${worldContext}
+    ${chapterContext}
+    ${historyContext}
+
+    CURRENT SCENARIO CONFIGURATION:
+    - Scene Name: ${scene.name}
+    - Location: ${scene.locationName || 'Unknown Location'}
+    - Visible Description (Player Context): ${scene.description}
+    
+    ${aiHiddenInstructions}
+    ${aiSensoryDetails}
+    ${aiEnvironmentLayout}
+
+    ${goalInstruction}
+    
+    ACTIVE CHARACTERS IN SCENE:
+    ${activeChars.map(c => `- ID: ${c?.id}, Name: ${c?.name}
+       Persona/Behavior: ${c?.basePersona}
+       Lore/History: ${c?.lore}
+       RELATIONSHIP CONTEXT:
+       ${c?.relContext}
+       CURRENT SCENE ROLE: ${c?.sceneRole}`).join('\n')}
+    
+    INSTRUCTIONS:
+    1. Analyze the user's input and the chat history.
+    2. Determine which character(s) should respond based on their personas, lore, relationship status, and the conversation flow. Multiple characters can speak in sequence.
+    3. Use the internal environment and sensory details to respond more accurately.
+    4. CHECK RELATIONSHIP TRIGGERS: If the relationship system is active for a character, check if the user's input triggers a value change.
+    5. Respond strictly in JSON.
+  `;
+
+  // 2. Format History for Gemini
+  const recentHistory = history.slice(-10).map(msg => 
+    `${msg.sender === 'user' ? 'Player' : (allCharacters.find(c => c.id === msg.characterId)?.name || 'Narrator')}: ${msg.text}`
+  ).join('\n');
+
+  const fullPrompt = `
+    ${systemPrompt}
+
+    RECENT CHAT HISTORY:
+    ${recentHistory}
+
+    CURRENT PLAYER INPUT:
+    "${currentInput}"
+  `;
+
+  try {
+    // Corrected model to gemini-3-flash-preview
+    const activeCharacterIds = activeChars.map(c => c!.id);
+    const responseSchema = buildResponseSchema(activeCharacterIds);
+
+    // Timeout mechanism to prevent infinite hang
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Gemini generateContent timed out after 60s")), 60000));
+    const response = await Promise.race([
+      ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: fullPrompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: responseSchema,
+          temperature: 1, // Allow for creative dialogue
+        },
+      }),
+      timeoutPromise
+    ]) as any;
+
+    const jsonText = response.text;
+    if (!jsonText) throw new Error("Empty response from AI");
+    
+    return JSON.parse(jsonText) as AIResponse;
+
+  } catch (error) {
+    console.error("Gemini Error:", error);
+    // Fallback in case of error to prevent crash
+    return {
+      characterResponses: [{ characterId: "system", text: "An error occurred communicating with the AI engine." }],
+      sceneGoalReached: false
+    };
+  }
+};

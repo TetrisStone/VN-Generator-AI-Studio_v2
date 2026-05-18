@@ -1,0 +1,6 @@
+{
+  "name": "VN Creator AI av 260519",
+  "description": "A Visual Novel creator and player powered by Gemini. Define characters, scenes, and goals, and let the AI drive the story and scene transitions dynamically.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
