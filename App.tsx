@@ -268,7 +268,8 @@ const App: React.FC = () => {
                     description: data.worldInfo.description || '',
                     factions: data.worldInfo.factions || [],
                     loreLocations: data.worldInfo.loreLocations || [],
-                    diceConfig: data.worldInfo.diceConfig || { skins: {} }
+                    diceConfig: data.worldInfo.diceConfig || { skins: {} },
+                    systemInstruction: data.worldInfo.systemInstruction || ''
                 });
             }
 
@@ -468,7 +469,8 @@ const App: React.FC = () => {
               description: data.worldInfo.description || '',
               factions: data.worldInfo.factions || [],
               loreLocations: data.worldInfo.loreLocations || [],
-              diceConfig: data.worldInfo.diceConfig || { skins: {} }
+              diceConfig: data.worldInfo.diceConfig || { skins: {} },
+              systemInstruction: data.worldInfo.systemInstruction || ''
            });
       }
       
@@ -482,7 +484,7 @@ const App: React.FC = () => {
       if (data.characters) setCharacters(data.characters);
       if (data.scenes) {
           // Migration for import
-          setScenes(data.scenes.map((s: any) => ({
+          const migratedScenes = data.scenes.map((s: any) => ({
               ...s,
               chapterId: s.chapterId || importedChapters[0].id,
               effects: s.effects || s.unlocks || [],
@@ -493,16 +495,21 @@ const App: React.FC = () => {
               environmentDetails: s.environmentDetails || '',
               relevantFactionIds: s.relevantFactionIds ?? undefined,
               relevantLocationIds: s.relevantLocationIds ?? undefined,
-          })));
+          }));
+          setScenes(migratedScenes);
+          data.scenes = migratedScenes;
       }
       
       if (data.battles) {
-           setBattles(data.battles.map((b: any) => ({
+           const migratedBattles = data.battles.map((b: any) => ({
                ...b,
                chapterId: b.chapterId || importedChapters[0].id
-           })));
+           }));
+           setBattles(migratedBattles);
+           data.battles = migratedBattles;
       } else {
           setBattles([]);
+          data.battles = [];
       }
 
       if (data.maps) setMaps(data.maps);

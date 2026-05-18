@@ -286,6 +286,36 @@ const AudioField: React.FC<AudioFieldProps> = ({ label, value, onChange }) => {
     );
 };
 
+interface ChapterEditorProps {
+    chapter: Chapter;
+    onChange: (u: Partial<Chapter>) => void;
+    onDelete: () => void;
+}
+
+const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapter, onChange, onDelete }) => {
+    return (
+        <div className="space-y-6 max-w-2xl bg-gray-900/50 p-6 rounded-xl border border-gray-800">
+            <div className="flex justify-between items-start">
+                <div>
+                     <h3 className="text-xl font-bold text-white">{chapter.name || 'Unnamed Chapter'}</h3>
+                     <div className="text-xs text-gray-500">ID: {chapter.id}</div>
+                </div>
+                <button onClick={onDelete} className="text-red-500 hover:text-red-400 bg-red-900/20 p-2 rounded"><Trash size={18}/></button>
+            </div>
+            
+            <div>
+                <label className="text-xs font-bold text-gray-500 uppercase">Chapter Name</label>
+                <input className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white" value={chapter.name} onChange={e => onChange({ name: e.target.value })} />
+            </div>
+
+            <div>
+                <label className="text-xs font-bold text-gray-500 uppercase">Description / Lore</label>
+                <textarea className="w-full bg-gray-800 border border-gray-700 rounded p-2 h-24 text-white" value={chapter.description} onChange={e => onChange({ description: e.target.value })} />
+            </div>
+        </div>
+    );
+};
+
 interface CharacterEditorProps {
   character: Character;
   onChange: (u: Partial<Character>) => void;
@@ -1229,7 +1259,7 @@ interface EditorProps {
 }
 
 export const Editor: React.FC<EditorProps> = (props) => {
-    const [tab, setTab] = useState<'home' | 'world' | 'chars' | 'scenes' | 'maps' | 'battles'>('home');
+    const [tab, setTab] = useState<'home' | 'world' | 'chapters' | 'chars' | 'scenes' | 'maps' | 'battles'>('home');
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [scenePrompt, setScenePrompt] = useState("");
@@ -1294,6 +1324,7 @@ export const Editor: React.FC<EditorProps> = (props) => {
                 <div className="flex-1 overflow-y-auto py-2 md:py-4 space-y-1 min-w-[16rem]">
                     <button onClick={() => { setTab('home'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'home' ? 'bg-indigo-900/30 text-indigo-400 border-r-2 border-indigo-500' : 'text-gray-400 hover:bg-gray-800'}`}><Play size={16}/> Home Settings</button>
                     <button onClick={() => { setTab('world'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'world' ? 'bg-indigo-900/30 text-indigo-400 border-r-2 border-indigo-500' : 'text-gray-400 hover:bg-gray-800'}`}><Book size={16}/> World & Lore</button>
+                    <button onClick={() => { setTab('chapters'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'chapters' ? 'bg-indigo-900/30 text-indigo-400 border-r-2 border-indigo-500' : 'text-gray-400 hover:bg-gray-800'}`}><Book size={16}/> Chapters</button>
                     <button onClick={() => { setTab('chars'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'chars' ? 'bg-indigo-900/30 text-indigo-400 border-r-2 border-indigo-500' : 'text-gray-400 hover:bg-gray-800'}`}><Users size={16}/> Characters</button>
                     <button onClick={() => { setTab('scenes'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'scenes' ? 'bg-indigo-900/30 text-indigo-400 border-r-2 border-indigo-500' : 'text-gray-400 hover:bg-gray-800'}`}><Monitor size={16}/> Scenes</button>
                     <button onClick={() => { setTab('maps'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'maps' ? 'bg-indigo-900/30 text-indigo-400 border-r-2 border-indigo-500' : 'text-gray-400 hover:bg-gray-800'}`}><MapIcon size={16}/> Maps</button>
@@ -1464,6 +1495,49 @@ export const Editor: React.FC<EditorProps> = (props) => {
                                      ))}
                                  </div>
                              </div>
+                        </div>
+                    </div>
+                )}
+
+                {tab === 'chapters' && (
+                    <div className="flex flex-col md:flex-row h-full gap-4 md:gap-6">
+                        <div className={`w-full md:w-1/3 border-none md:border-r border-gray-800 pb-4 md:pb-0 md:pr-4 overflow-y-auto ${selectedId ? 'hidden md:block' : 'block'}`}>
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-xl font-bold text-white flex items-center gap-2"><Book size={20}/> Chapters</h2>
+                            </div>
+                            <Button className="w-full mb-4 py-1.5 text-sm" onClick={() => {
+                                const id = crypto.randomUUID();
+                                props.onUpdateChapters([...props.chapters, {
+                                    id,
+                                    name: 'New Chapter',
+                                    description: ''
+                                }]);
+                                setSelectedId(id);
+                            }}><Plus size={14}/> Add Chapter</Button>
+                            <div className="space-y-2">
+                                {props.chapters.map(c => (
+                                    <div key={c.id} onClick={() => setSelectedId(c.id)} className={`p-2 md:p-3 rounded cursor-pointer border text-sm ${selectedId === c.id ? 'bg-indigo-900/50 border-indigo-500' : 'bg-gray-900 border-gray-800 hover:bg-gray-800'}`}>
+                                        <div className="font-bold text-white truncate">{c.name || 'Unnamed Chapter'}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className={`flex-1 overflow-y-auto ${!selectedId ? 'hidden md:block' : 'block'}`}>
+                            {selectedId && (
+                                <div className="md:hidden mb-4">
+                                    <Button variant="secondary" className="text-xs py-1 px-2" onClick={() => setSelectedId(null)}><ArrowLeft size={14}/> Back to List</Button>
+                                </div>
+                            )}
+                            {selectedId ? (
+                                <ChapterEditor 
+                                    key={selectedId} 
+                                    chapter={props.chapters.find(c => c.id === selectedId)!} 
+                                    onChange={(u) => props.onUpdateChapters(props.chapters.map(x => x.id === selectedId ? { ...x, ...u } : x))} 
+                                    onDelete={() => { props.onUpdateChapters(props.chapters.filter(x => x.id !== selectedId)); setSelectedId(null); }} 
+                                />
+                            ) : (
+                                <div className="h-full flex items-center justify-center text-gray-600 italic text-sm">Select a chapter from the list to edit its details.</div>
+                            )}
                         </div>
                     </div>
                 )}
