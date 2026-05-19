@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Character, Scene, WorldMap, Battle, WorldInfo, Chapter, SceneEffect, MapSpot, WorldLocation, Faction, RelationshipTrigger, RelationshipThreshold, StoryLogEntry } from '../types';
 import { Button } from './ui/Button';
-import { Trash, Sword, Scaling, Plus, Save, Play, Download, Upload, Monitor, Map as MapIcon, Users, Target, Book, Layout, MessageSquare, Unlock, Lock, Waypoints, Image as ImageIcon, XCircle, Terminal, MapPin, Heart, EyeOff, Video, Music, Sparkles, Loader2, ArrowLeft } from 'lucide-react';
+import { Trash, Sword, Scaling, Plus, Save, Play, Download, Upload, Monitor, Map as MapIcon, Users, Target, Book, Layout, MessageSquare, Unlock, Lock, Waypoints, Image as ImageIcon, XCircle, Terminal, MapPin, Heart, EyeOff, Video, Music, Sparkles, Loader2, ArrowLeft, Cpu } from 'lucide-react';
 import { generateAutoScene } from '../services/geminiService';
 import { AsyncImage } from './ui/AsyncImage';
 import { AsyncVideo } from './ui/AsyncVideo';
@@ -1379,6 +1379,63 @@ export const Editor: React.FC<EditorProps> = (props) => {
                                         <Button variant="secondary" className="w-full py-3 justify-center font-semibold text-purple-400 border-purple-500/30 hover:bg-purple-900/20" title="Import Editor Project"><Upload size={18} className="mr-2"/> Import Full Project</Button>
                                         <input type="file" onChange={handleImport} className="absolute inset-0 opacity-0 cursor-pointer" accept=".json,.zip"/>
                                     </div>
+                                </div>
+                            </div>
+
+                            {/* LLM Settings */}
+                            <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 space-y-4 md:col-span-2">
+                                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><Cpu className="text-orange-500" size={20}/> Model Settings</h3>
+                                <p className="text-xs text-gray-400 mb-4">Select the AI Model used for generation.</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-xs font-bold text-gray-500 uppercase">Provider</label>
+                                        <select 
+                                            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white h-[42px] focus:border-indigo-500 outline-none"
+                                            value={props.worldInfo.llmProvider || 'gemini'}
+                                            onChange={e => props.onUpdateWorldInfo({ ...props.worldInfo, llmProvider: e.target.value as 'gemini' | 'ollama' })}
+                                        >
+                                            <option value="gemini">Gemini</option>
+                                            <option value="ollama">Local (Ollama)</option>
+                                        </select>
+                                    </div>
+                                    {(!props.worldInfo.llmProvider || props.worldInfo.llmProvider === 'gemini') && (
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Model</label>
+                                            <select 
+                                                className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white h-[42px] focus:border-indigo-500 outline-none"
+                                                value={props.worldInfo.llmModel || 'gemini-3-flash-preview'}
+                                                onChange={e => props.onUpdateWorldInfo({ ...props.worldInfo, llmModel: e.target.value })}
+                                            >
+                                                <option value="gemini-3-flash-preview">Gemini 3 Flash Preview</option>
+                                                <option value="gemini-1.5-pro-latest">Gemini 1.5 Pro</option>
+                                                <option value="gemini-1.5-flash-latest">Gemini 1.5 Flash</option>
+                                            </select>
+                                        </div>
+                                    )}
+                                    {props.worldInfo.llmProvider === 'ollama' && (
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Model</label>
+                                            <input 
+                                                type="text"
+                                                className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white h-[42px] focus:border-indigo-500 outline-none"
+                                                value={props.worldInfo.llmModel || 'llama3'}
+                                                placeholder="e.g. llama3, mistral"
+                                                onChange={e => props.onUpdateWorldInfo({ ...props.worldInfo, llmModel: e.target.value })}
+                                            />
+                                        </div>
+                                    )}
+                                    {props.worldInfo.llmProvider === 'ollama' && (
+                                        <div className="sm:col-span-2">
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Ollama URL</label>
+                                            <input 
+                                                type="text"
+                                                className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white h-[42px] focus:border-indigo-500 outline-none"
+                                                value={props.worldInfo.ollamaUrl || 'http://localhost:11434'}
+                                                placeholder="http://localhost:11434"
+                                                onChange={e => props.onUpdateWorldInfo({ ...props.worldInfo, ollamaUrl: e.target.value })}
+                                            />
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>

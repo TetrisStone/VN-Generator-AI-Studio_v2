@@ -102,14 +102,60 @@ function buildSceneGenSchema(allCharacterIds: string[]): Schema {
   };
 }
 
+async function callLLM(worldInfo: WorldInfo | undefined, prompt: string, schema: Schema, defaultGeminiModel: string) {
+    const isOllama = worldInfo?.llmProvider === 'ollama';
+    if (isOllama) {
+        const url = (worldInfo?.ollamaUrl || 'http://localhost:11434').replace(/\/$/, '');
+        const model = worldInfo?.llmModel || 'llama3';
+        
+        let ollamaPrompt = prompt + `\n\nCRITICAL: You must output strictly valid JSON matching this schema:\n${JSON.stringify(schema, null, 2)}`;
+        
+        const res = await fetch(`${url}/api/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: model,
+                prompt: ollamaPrompt,
+                stream: false,
+                format: 'json'
+            })
+        });
+        
+        if (!res.ok) {
+            throw new Error(`Ollama Error: ${res.statusText}`);
+        }
+        
+        const data = await res.json();
+        return JSON.parse(data.response);
+    } else {
+        if (!process.env.API_KEY) throw new Error("API Key not found");
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const model = worldInfo?.llmModel || defaultGeminiModel;
+        
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Gemini generateContent timed out after 60s")), 60000));
+        const res = await Promise.race([
+            ai.models.generateContent({
+                model: model,
+                contents: prompt,
+                config: {
+                    responseMimeType: "application/json",
+                    responseSchema: schema,
+                    temperature: 1
+                }
+            }),
+            timeoutPromise
+        ]) as any;
+        
+        return JSON.parse(res.text || "{}");
+    }
+}
+
 export const generateSceneSummary = async (
     scene: Scene,
     characters: Character[],
-    history: ChatMessage[]
+    history: ChatMessage[],
+    worldInfo?: WorldInfo
 ): Promise<string> => {
-    if (!process.env.API_KEY) throw new Error("API Key not found");
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
     // Identify characters by name for the prompt
     const charNames = scene.characters
         .map(sc => characters.find(c => c.id === sc.characterId)?.name)
@@ -139,15 +185,7 @@ export const generateSceneSummary = async (
     `;
 
     try {
-        const response = await ai.models.generateContent({
-            model: "gemini-3-flash-preview",
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: SUMMARY_SCHEMA,
-            }
-        });
-        const json = JSON.parse(response.text || "{}");
+        const json = await callLLM(worldInfo, prompt, SUMMARY_SCHEMA, "gemini-3-flash-preview");
         return json.summary || "No summary available.";
     } catch (e) {
         console.error("Summary Generation Failed", e);
@@ -161,9 +199,6 @@ export const generateAutoScene = async (
     worldInfo: WorldInfo,
     customPrompt?: string
 ): Promise<Partial<Scene>> => {
-    if (!process.env.API_KEY) throw new Error("API Key not found");
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
     const charList = allCharacters.map(c => `ID: ${c.id} | Name: ${c.name} | Role: ${c.defaultDescription}`).join('\n');
     
     const recentEvents = storyLog.slice(-5).map(e => `[${e.sceneName}] ${e.summary}`).join('\n');
@@ -197,21 +232,7 @@ export const generateAutoScene = async (
         const allCharacterIds = allCharacters.map(c => c.id);
         const sceneGenSchema = buildSceneGenSchema(allCharacterIds);
 
-        // Timeout mechanism to prevent infinite hang
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Gemini generateContent timed out after 60s")), 60000));
-        const response = await Promise.race([
-          ai.models.generateContent({
-              model: "gemini-3-flash-preview",
-              contents: prompt,
-              config: {
-                  responseMimeType: "application/json",
-                  responseSchema: sceneGenSchema,
-                  temperature: 1.1 // Slightly higher creativity
-              }
-          }),
-          timeoutPromise
-        ]) as any;
-        const json = JSON.parse(response.text || "{}");
+        const json = await callLLM(worldInfo, prompt, sceneGenSchema, "gemini-3-flash-preview");
         return json;
     } catch (e) {
         console.error("Scene Generation Failed", e);
@@ -228,12 +249,6 @@ export const generateGameTurn = async (
   chapter?: Chapter,
   storyLog: StoryLogEntry[] = [] // New Parameter
 ): Promise<AIResponse> => {
-  if (!process.env.API_KEY) {
-    throw new Error("API Key not found");
-  }
-
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
   // 1. Construct the Context
   const activeChars = scene.characters.map(sc => {
     const baseChar = allCharacters.find(c => c.id === sc.characterId);
@@ -394,29 +409,12 @@ export const generateGameTurn = async (
   `;
 
   try {
-    // Corrected model to gemini-3-flash-preview
     const activeCharacterIds = activeChars.map(c => c!.id);
     const responseSchema = buildResponseSchema(activeCharacterIds);
 
-    // Timeout mechanism to prevent infinite hang
-    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Gemini generateContent timed out after 60s")), 60000));
-    const response = await Promise.race([
-      ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: fullPrompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: responseSchema,
-          temperature: 1, // Allow for creative dialogue
-        },
-      }),
-      timeoutPromise
-    ]) as any;
-
-    const jsonText = response.text;
-    if (!jsonText) throw new Error("Empty response from AI");
+    const json = await callLLM(worldInfo, fullPrompt, responseSchema, "gemini-3-flash-preview");
     
-    return JSON.parse(jsonText) as AIResponse;
+    return json as AIResponse;
 
   } catch (error) {
     console.error("Gemini Error:", error);

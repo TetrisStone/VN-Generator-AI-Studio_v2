@@ -128,7 +128,10 @@ const DEFAULT_WORLD: WorldInfo = {
     loreLocations: [
         { id: 'l1', name: 'Sector 7', description: 'The industrial district where the poor live.' }
     ],
-    diceConfig: { skins: {} }
+    diceConfig: { skins: {} },
+    llmProvider: 'gemini',
+    llmModel: 'gemini-3-flash-preview',
+    ollamaUrl: 'http://localhost:11434'
 };
 
 const PROJECT_STORAGE_KEY = 'vn_creator_project';
@@ -269,7 +272,10 @@ const App: React.FC = () => {
                     factions: data.worldInfo.factions || [],
                     loreLocations: data.worldInfo.loreLocations || [],
                     diceConfig: data.worldInfo.diceConfig || { skins: {} },
-                    systemInstruction: data.worldInfo.systemInstruction || ''
+                    systemInstruction: data.worldInfo.systemInstruction || '',
+                    llmProvider: data.worldInfo.llmProvider || 'gemini',
+                    llmModel: data.worldInfo.llmModel || 'gemini-3-flash-preview',
+                    ollamaUrl: data.worldInfo.ollamaUrl || 'http://localhost:11434'
                 });
             }
 
@@ -470,7 +476,10 @@ const App: React.FC = () => {
               factions: data.worldInfo.factions || [],
               loreLocations: data.worldInfo.loreLocations || [],
               diceConfig: data.worldInfo.diceConfig || { skins: {} },
-              systemInstruction: data.worldInfo.systemInstruction || ''
+              systemInstruction: data.worldInfo.systemInstruction || '',
+              llmProvider: data.worldInfo.llmProvider || 'gemini',
+              llmModel: data.worldInfo.llmModel || 'gemini-3-flash-preview',
+              ollamaUrl: data.worldInfo.ollamaUrl || 'http://localhost:11434'
            });
       }
       
@@ -682,7 +691,7 @@ const App: React.FC = () => {
           setGeneratingSummary(true);
           // Only generate summary if it's the first completion OR repeatable?
           // Let's generate every time for now to keep a log of repeat visits.
-          const summaryText = await generateSceneSummary(activeScene, characters, history);
+          const summaryText = await generateSceneSummary(activeScene, characters, history, worldInfo);
           
           const newEntry: StoryLogEntry = {
               id: crypto.randomUUID(),

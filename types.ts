@@ -181,6 +181,9 @@ export interface WorldInfo {
   loreLocations: WorldLocation[];
   systemInstruction?: string;
   diceConfig?: { skins: Record<number, string[]> };
+  llmProvider?: 'gemini' | 'ollama';
+  llmModel?: string;
+  ollamaUrl?: string;
 }
 
 export interface Chapter {
