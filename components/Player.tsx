@@ -34,6 +34,7 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
   // Dev Tools State
   const [showDevTools, setShowDevTools] = useState(false);
   const [lastTokenStats, setLastTokenStats] = useState<{promptTokens?: number, completionTokens?: number, totalTokens?: number} | null>(null);
+  const [lastRawResponse, setLastRawResponse] = useState<string | null>(null);
 
   // Notifications for Relationship Updates
   const [notifications, setNotifications] = useState<{ id: string, text: string, type: 'good' | 'bad' }[]>([]);
@@ -181,6 +182,9 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
       if (aiResponse?.tokenStats) {
           setLastTokenStats(aiResponse.tokenStats);
       }
+      if (aiResponse?.rawResponseText != null) {
+          setLastRawResponse(aiResponse.rawResponseText);
+      }
 
     } catch (error: any) {
       console.error("Turn error", error);
@@ -291,16 +295,30 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
 
           {/* Dev Tools Panel */}
           {showDevTools && (
-             <div className="bg-black/80 backdrop-blur-md border border-indigo-500/30 p-3 rounded-xl min-w-[200px] text-xs font-mono text-gray-300 shadow-xl animate-in fade-in slide-in-from-left-4">
-                <div className="font-bold text-indigo-400 mb-2 border-b border-indigo-500/30 pb-1">Token Usage (Last Turn)</div>
+             <div className="bg-black/95 backdrop-blur-md border border-indigo-500/30 p-3 rounded-xl min-w-[280px] max-w-[320px] text-xs font-mono text-gray-300 shadow-xl animate-in fade-in slide-in-from-left-4 flex flex-col gap-2">
+                <div className="font-bold text-indigo-400 border-b border-indigo-500/30 pb-1 flex justify-between items-center">
+                   <span>Token Usage</span>
+                   {lastTokenStats && <span className="text-[10px] text-gray-400 font-normal">Last Turn</span>}
+                </div>
                 {lastTokenStats ? (
-                  <div className="flex flex-col gap-1">
-                     <div className="flex justify-between"><span>Prompt:</span> <span>{lastTokenStats.promptTokens || 0}</span></div>
-                     <div className="flex justify-between"><span>Completion:</span> <span>{lastTokenStats.completionTokens || 0}</span></div>
-                     <div className="flex justify-between border-t border-gray-700/50 pt-1 mt-1 font-bold text-indigo-300"><span>Total:</span> <span>{lastTokenStats.totalTokens || 0}</span></div>
+                  <div className="flex flex-col gap-1 text-[11px]">
+                     <div className="flex justify-between"><span>Prompt:</span> <span className="text-gray-100 font-bold">{lastTokenStats.promptTokens || 0}</span></div>
+                     <div className="flex justify-between"><span>Completion:</span> <span className="text-gray-100 font-bold">{lastTokenStats.completionTokens || 0}</span></div>
+                     <div className="flex justify-between border-t border-gray-700/50 pt-1 mt-1 font-bold text-indigo-300"><span>Total:</span> <span className="text-indigo-200">{lastTokenStats.totalTokens || 0}</span></div>
                   </div>
                 ) : (
-                  <div className="text-gray-500 italic">No data yet. Send a message!</div>
+                  <div className="text-gray-500 italic text-[11px]">No token usage data yet.</div>
+                )}
+
+                <div className="font-bold text-indigo-400 border-b border-indigo-500/30 pb-1 pt-1">Raw Response Text</div>
+                {lastRawResponse ? (
+                  <div className="relative">
+                    <pre className="text-[10px] bg-gray-950/85 p-2 rounded border border-gray-850 text-gray-400 max-h-[160px] overflow-y-auto whitespace-pre-wrap break-all leading-relaxed">
+                      {lastRawResponse}
+                    </pre>
+                  </div>
+                ) : (
+                  <div className="text-gray-500 italic text-[11px]">No local LLM response recorded yet.</div>
                 )}
              </div>
           )}
