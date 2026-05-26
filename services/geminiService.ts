@@ -126,7 +126,14 @@ async function callLLM(worldInfo: WorldInfo | undefined, prompt: string, schema:
         }
         
         const data = await res.json();
-        return JSON.parse(data.response);
+        
+        const tokenStats = {
+            promptTokens: data.prompt_eval_count || 0,
+            completionTokens: data.eval_count || 0,
+            totalTokens: (data.prompt_eval_count || 0) + (data.eval_count || 0)
+        };
+        
+        return { json: JSON.parse(data.response), tokenStats };
     } else {
         if (!process.env.API_KEY) throw new Error("API Key not found");
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -146,7 +153,13 @@ async function callLLM(worldInfo: WorldInfo | undefined, prompt: string, schema:
             timeoutPromise
         ]) as any;
         
-        return JSON.parse(res.text || "{}");
+        const tokenStats = {
+            promptTokens: res.usageMetadata?.promptTokenCount || 0,
+            completionTokens: res.usageMetadata?.candidatesTokenCount || 0,
+            totalTokens: res.usageMetadata?.totalTokenCount || 0
+        };
+        
+        return { json: JSON.parse(res.text || "{}"), tokenStats };
     }
 }
 
@@ -185,7 +198,7 @@ export const generateSceneSummary = async (
     `;
 
     try {
-        const json = await callLLM(worldInfo, prompt, SUMMARY_SCHEMA, "gemini-3-flash-preview");
+        const { json } = await callLLM(worldInfo, prompt, SUMMARY_SCHEMA, "gemini-3.5-flash");
         return json.summary || "No summary available.";
     } catch (e) {
         console.error("Summary Generation Failed", e);
@@ -232,7 +245,7 @@ export const generateAutoScene = async (
         const allCharacterIds = allCharacters.map(c => c.id);
         const sceneGenSchema = buildSceneGenSchema(allCharacterIds);
 
-        const json = await callLLM(worldInfo, prompt, sceneGenSchema, "gemini-3-flash-preview");
+        const { json } = await callLLM(worldInfo, prompt, sceneGenSchema, "gemini-3.5-flash");
         return json;
     } catch (e) {
         console.error("Scene Generation Failed", e);
@@ -412,9 +425,9 @@ export const generateGameTurn = async (
     const activeCharacterIds = activeChars.map(c => c!.id);
     const responseSchema = buildResponseSchema(activeCharacterIds);
 
-    const json = await callLLM(worldInfo, fullPrompt, responseSchema, "gemini-3-flash-preview");
+    const { json, tokenStats } = await callLLM(worldInfo, fullPrompt, responseSchema, "gemini-3.5-flash");
     
-    return json as AIResponse;
+    return { ...json, tokenStats } as AIResponse;
 
   } catch (error) {
     console.error("Gemini Error:", error);

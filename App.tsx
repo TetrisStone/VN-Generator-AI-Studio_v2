@@ -130,7 +130,7 @@ const DEFAULT_WORLD: WorldInfo = {
     ],
     diceConfig: { skins: {} },
     llmProvider: 'gemini',
-    llmModel: 'gemini-3-flash-preview',
+    llmModel: 'gemini-3.5-flash',
     ollamaUrl: 'http://localhost:11434'
 };
 
@@ -274,7 +274,7 @@ const App: React.FC = () => {
                     diceConfig: data.worldInfo.diceConfig || { skins: {} },
                     systemInstruction: data.worldInfo.systemInstruction || '',
                     llmProvider: data.worldInfo.llmProvider || 'gemini',
-                    llmModel: data.worldInfo.llmModel || 'gemini-3-flash-preview',
+                    llmModel: data.worldInfo.llmModel || 'gemini-3.5-flash',
                     ollamaUrl: data.worldInfo.ollamaUrl || 'http://localhost:11434'
                 });
             }
@@ -478,7 +478,7 @@ const App: React.FC = () => {
               diceConfig: data.worldInfo.diceConfig || { skins: {} },
               systemInstruction: data.worldInfo.systemInstruction || '',
               llmProvider: data.worldInfo.llmProvider || 'gemini',
-              llmModel: data.worldInfo.llmModel || 'gemini-3-flash-preview',
+              llmModel: data.worldInfo.llmModel || 'gemini-3.5-flash',
               ollamaUrl: data.worldInfo.ollamaUrl || 'http://localhost:11434'
            });
       }

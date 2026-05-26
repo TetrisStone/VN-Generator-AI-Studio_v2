@@ -1403,12 +1403,11 @@ export const Editor: React.FC<EditorProps> = (props) => {
                                             <label className="text-xs font-bold text-gray-500 uppercase">Model</label>
                                             <select 
                                                 className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white h-[42px] focus:border-indigo-500 outline-none"
-                                                value={props.worldInfo.llmModel || 'gemini-3-flash-preview'}
+                                                value={props.worldInfo.llmModel || 'gemini-3.5-flash'}
                                                 onChange={e => props.onUpdateWorldInfo({ ...props.worldInfo, llmModel: e.target.value })}
                                             >
-                                                <option value="gemini-3-flash-preview">Gemini 3 Flash Preview</option>
-                                                <option value="gemini-1.5-pro-latest">Gemini 1.5 Pro</option>
-                                                <option value="gemini-1.5-flash-latest">Gemini 1.5 Flash</option>
+                                                <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+                                                <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Preview)</option>
                                             </select>
                                         </div>
                                     )}

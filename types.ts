@@ -148,6 +148,12 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+export interface TokenStats {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
 export interface AIResponse {
   characterResponses: {
     characterId: string;
@@ -161,6 +167,7 @@ export interface AIResponse {
   }[];
   sceneGoalReached: boolean;
   sceneTransitionReason?: string;
+  tokenStats?: TokenStats;
 }
 
 export interface Faction {

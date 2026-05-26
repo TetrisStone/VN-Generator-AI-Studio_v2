@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Scene, Character, ChatMessage, GameState, GameSaveData, Chapter, WorldInfo, CharacterEmotion } from '../types';
 import { generateGameTurn } from '../services/geminiService';
 import { Button } from './ui/Button';
-import { ArrowLeft, RefreshCw, Send, Save, Map, CheckCircle, Play, MapPin, Heart, SkipForward, Target } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Send, Save, Map, CheckCircle, Play, MapPin, Heart, SkipForward, Target, Cpu } from 'lucide-react';
 import { AsyncImage } from './ui/AsyncImage';
 import { AsyncVideo } from './ui/AsyncVideo';
 
@@ -30,6 +30,10 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
   // Track goal reached state locally to show UI elements
   const [goalReached, setGoalReached] = useState(false);
   const [goalReason, setGoalReason] = useState<string | null>(null);
+
+  // Dev Tools State
+  const [showDevTools, setShowDevTools] = useState(false);
+  const [lastTokenStats, setLastTokenStats] = useState<{promptTokens?: number, completionTokens?: number, totalTokens?: number} | null>(null);
 
   // Notifications for Relationship Updates
   const [notifications, setNotifications] = useState<{ id: string, text: string, type: 'good' | 'bad' }[]>([]);
@@ -135,7 +139,8 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
       const safeEmotion = (e: string | undefined): CharacterEmotion | undefined =>
         e && validEmotions.includes(e as CharacterEmotion) ? (e as CharacterEmotion) : 'idle';
 
-      const newMessages: ChatMessage[] = aiResponse.characterResponses.map(resp => ({
+      const characterResponses = aiResponse?.characterResponses || [];
+      const newMessages: ChatMessage[] = characterResponses.map((resp: any) => ({
         sender: 'model',
         characterId: resp.characterId,
         emotion: safeEmotion(resp.emotion),
@@ -150,8 +155,8 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
       }));
 
       // Handle Relationship Updates
-      if (aiResponse.relationshipUpdates && aiResponse.relationshipUpdates.length > 0 && onCharacterUpdate) {
-          aiResponse.relationshipUpdates.forEach(update => {
+      if (aiResponse?.relationshipUpdates && aiResponse.relationshipUpdates.length > 0 && onCharacterUpdate) {
+          aiResponse.relationshipUpdates.forEach((update: any) => {
               const char = characters.find(c => c.id === update.characterId);
               if (char && char.relationship) {
                   // Calculate new value
@@ -168,13 +173,18 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
           });
       }
 
-      if (aiResponse.sceneGoalReached) {
+      if (aiResponse?.sceneGoalReached) {
         setGoalReached(true);
         setGoalReason(aiResponse.sceneTransitionReason || "Objective Completed.");
       }
+      
+      if (aiResponse?.tokenStats) {
+          setLastTokenStats(aiResponse.tokenStats);
+      }
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Turn error", error);
+      addNotification(`Error: ${error.message}`, 'bad');
       setState(prev => ({ ...prev, isProcessing: false }));
     }
   };
@@ -259,14 +269,42 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
       {/* Top Bar Navigation */}
       <div className="absolute top-2 left-2 right-2 md:top-4 md:left-4 md:right-4 z-50 flex justify-between items-start pointer-events-none gap-2">
         
-        {/* Back / Pause Button */}
-        <button 
-           onClick={() => handleManualExit(false)}
-           className="pointer-events-auto flex items-center gap-1 md:gap-2 bg-black/50 hover:bg-black/70 text-gray-200 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-md border border-white/10 transition-all hover:scale-105 shadow-lg group flex-shrink-0"
-        >
-           <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
-           <span className="font-semibold text-xs md:text-sm hidden sm:inline">Resume</span>
-        </button>
+        {/* Left Side Controls */}
+        <div className="flex flex-col gap-2 pointer-events-auto">
+          {/* Back / Pause Button */}
+          <button 
+             onClick={() => handleManualExit(false)}
+             className="flex items-center gap-1 md:gap-2 bg-black/50 hover:bg-black/70 text-gray-200 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-md border border-white/10 transition-all hover:scale-105 shadow-lg group flex-shrink-0"
+          >
+             <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
+             <span className="font-semibold text-xs md:text-sm hidden sm:inline">Resume</span>
+          </button>
+          
+          {/* Dev Tools Toggle */}
+          <button 
+             onClick={() => setShowDevTools(!showDevTools)}
+             className={`flex items-center gap-1 md:gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-md border transition-all shadow-lg flex-shrink-0 ${showDevTools ? 'bg-indigo-600/80 border-indigo-400 text-white' : 'bg-black/50 hover:bg-black/70 border-white/10 text-gray-300'}`}
+          >
+             <Cpu size={14} />
+             <span className="font-semibold text-xs md:text-sm hidden sm:inline">Dev Tools</span>
+          </button>
+
+          {/* Dev Tools Panel */}
+          {showDevTools && (
+             <div className="bg-black/80 backdrop-blur-md border border-indigo-500/30 p-3 rounded-xl min-w-[200px] text-xs font-mono text-gray-300 shadow-xl animate-in fade-in slide-in-from-left-4">
+                <div className="font-bold text-indigo-400 mb-2 border-b border-indigo-500/30 pb-1">Token Usage (Last Turn)</div>
+                {lastTokenStats ? (
+                  <div className="flex flex-col gap-1">
+                     <div className="flex justify-between"><span>Prompt:</span> <span>{lastTokenStats.promptTokens || 0}</span></div>
+                     <div className="flex justify-between"><span>Completion:</span> <span>{lastTokenStats.completionTokens || 0}</span></div>
+                     <div className="flex justify-between border-t border-gray-700/50 pt-1 mt-1 font-bold text-indigo-300"><span>Total:</span> <span>{lastTokenStats.totalTokens || 0}</span></div>
+                  </div>
+                ) : (
+                  <div className="text-gray-500 italic">No data yet. Send a message!</div>
+                )}
+             </div>
+          )}
+        </div>
 
         {/* Location / Chapter Display & Goal */}
         <div className="bg-black/60 backdrop-blur-md border border-white/10 px-3 py-1.5 md:px-4 md:py-2 rounded-xl md:rounded-full text-indigo-200 font-bold shadow-lg flex flex-col items-center max-w-[50%] md:max-w-md w-full">
