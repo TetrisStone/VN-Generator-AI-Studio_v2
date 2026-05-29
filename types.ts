@@ -168,7 +168,6 @@ export interface AIResponse {
   sceneGoalReached: boolean;
   sceneTransitionReason?: string;
   tokenStats?: TokenStats;
-  rawResponseText?: string;
 }
 
 export interface Faction {

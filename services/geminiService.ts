@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { Type, Schema } from "@google/genai";
 import { Scene, Character, ChatMessage, AIResponse, WorldInfo, Chapter, StoryLogEntry, SceneCharacterConfig } from "../types";
 
 export const EMOTION_ENUM = ['idle', 'happy', 'angry', 'thoughtful', 'shy', 'sad', 'shocked', 'worried', 'lustful'] as const;
@@ -102,68 +102,6 @@ function buildSceneGenSchema(allCharacterIds: string[]): Schema {
   };
 }
 
-export function normalizeAIResponse(raw: any): Omit<AIResponse, 'tokenStats'> {
-  if (!raw || typeof raw !== 'object') {
-    return {
-      characterResponses: [],
-      sceneGoalReached: false
-    };
-  }
-
-  // Find characterResponses under any common casing (camelCase, snake_case, etc)
-  let characterResponses: any[] = [];
-  const rawResponses = raw.characterResponses || raw.character_responses || raw.characterResponsesList || raw.responses || [];
-  if (Array.isArray(rawResponses)) {
-    characterResponses = rawResponses.map((r: any) => {
-      if (!r) return null;
-      if (typeof r === 'string') {
-        return {
-          characterId: 'narrator',
-          emotion: 'idle',
-          text: r
-        };
-      }
-      return {
-        characterId: r.characterId || r.character_id || r.id || r.character || r.characterID || 'narrator',
-        emotion: r.emotion || r.mood || r.state || 'idle',
-        text: r.text || r.dialogue || r.speech || r.message || r.line || ''
-      };
-    }).filter(Boolean);
-  } else if (rawResponses && typeof rawResponses === 'object') {
-    // If it's a single response object
-    characterResponses = [{
-      characterId: rawResponses.characterId || rawResponses.character_id || rawResponses.id || 'narrator',
-      emotion: rawResponses.emotion || 'idle',
-      text: rawResponses.text || rawResponses.dialogue || rawResponses.message || ''
-    }];
-  }
-
-  // Find relationshipUpdates
-  let relationshipUpdates: any[] = [];
-  const rawUpdates = raw.relationshipUpdates || raw.relationship_updates || raw.relationshipUpdatesList || [];
-  if (Array.isArray(rawUpdates)) {
-    relationshipUpdates = rawUpdates.map((u: any) => {
-      if (!u || typeof u !== 'object') return null;
-      return {
-        characterId: u.characterId || u.character_id || u.id || u.character || '',
-        change: Number(u.change || u.valueChange || u.value_change || 0),
-        reason: u.reason || u.why || ''
-      };
-    }).filter((u: any) => u && u.characterId);
-  }
-
-  // sceneGoalReached
-  const sceneGoalReached = !!(raw.sceneGoalReached || raw.scene_goal_reached || raw.goalReached || raw.goal_reached || false);
-  const sceneTransitionReason = raw.sceneTransitionReason || raw.scene_transition_reason || raw.transitionReason || raw.transition_reason || '';
-
-  return {
-    characterResponses,
-    relationshipUpdates,
-    sceneGoalReached,
-    sceneTransitionReason
-  };
-}
-
 async function callLLM(worldInfo: WorldInfo | undefined, prompt: string, schema: Schema, defaultGeminiModel: string) {
     const isOllama = worldInfo?.llmProvider === 'ollama';
     if (isOllama) {
@@ -195,51 +133,20 @@ async function callLLM(worldInfo: WorldInfo | undefined, prompt: string, schema:
             totalTokens: (data.prompt_eval_count || 0) + (data.eval_count || 0)
         };
         
-        console.log("Ollama Response Raw:", data.response);
-
-        let parsedJson: any = {};
-        try {
-            parsedJson = JSON.parse(data.response || "{}");
-        } catch (err: any) {
-            console.error("Failed to parse Ollama JSON:", err, "Raw response content:", data.response);
-            parsedJson = {
-                characterResponses: [{
-                    characterId: 'narrator',
-                    emotion: 'idle',
-                    text: data.response || "No text responses were captured."
-                }],
-                sceneGoalReached: false
-            };
+        return { json: JSON.parse(data.response), tokenStats };
+    } else {
+        const response = await fetch("/api/gemini/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt, schema, defaultGeminiModel, worldInfo })
+        });
+        
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.error || `Server Error: ${response.statusText}`);
         }
         
-        return { json: parsedJson, tokenStats, rawResponseText: data.response || "" };
-    } else {
-        if (!process.env.API_KEY) throw new Error("API Key not found");
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const model = worldInfo?.llmModel || defaultGeminiModel;
-        
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Gemini generateContent timed out after 60s")), 60000));
-        const res = await Promise.race([
-            ai.models.generateContent({
-                model: model,
-                contents: prompt,
-                config: {
-                    responseMimeType: "application/json",
-                    responseSchema: schema,
-                    temperature: 1
-                }
-            }),
-            timeoutPromise
-        ]) as any;
-        
-        const tokenStats = {
-            promptTokens: res.usageMetadata?.promptTokenCount || 0,
-            completionTokens: res.usageMetadata?.candidatesTokenCount || 0,
-            totalTokens: res.usageMetadata?.totalTokenCount || 0
-        };
-        
-        const textValue = res.text || "{}";
-        return { json: JSON.parse(textValue), tokenStats, rawResponseText: textValue };
+        return await response.json();
     }
 }
 
@@ -505,11 +412,9 @@ export const generateGameTurn = async (
     const activeCharacterIds = activeChars.map(c => c!.id);
     const responseSchema = buildResponseSchema(activeCharacterIds);
 
-    const { json, tokenStats, rawResponseText } = await callLLM(worldInfo, fullPrompt, responseSchema, "gemini-3.5-flash");
+    const { json, tokenStats } = await callLLM(worldInfo, fullPrompt, responseSchema, "gemini-3.5-flash");
     
-    const normalized = normalizeAIResponse(json);
-    
-    return { ...normalized, tokenStats, rawResponseText } as AIResponse;
+    return { ...json, tokenStats } as AIResponse;
 
   } catch (error) {
     console.error("Gemini Error:", error);

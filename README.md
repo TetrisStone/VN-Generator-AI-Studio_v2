@@ -28,3 +28,43 @@ Given the sheer scale of the new storage structures, a single `.json` file can n
 - **Importing a ZIP archive** follows the exact reverse path, unpacking JSON states into the primary stores, and looping through `images/` restoring UUID mapping in `images` object store.
 
 Legacy `.json` files are still supported during Import: the system detects filetypes and will gracefully fall back to native JSON-parsing if `JSZip` drops execution.
+
+## Lokale Ausführung (Lokal starten)
+
+Du kannst diese App ganz einfach auf deinem eigenen Rechner ausführen. Folge dazu diesen Schritten:
+
+### 1. Voraussetzungen
+Stelle sicher, dass **Node.js** (Version 18 oder neuer) auf deinem System installiert ist. Du kannst die Installation mit dem Befehl `node -v` im Terminal überprüfen.
+
+### 2. Abhängigkeiten installieren
+Öffne das Terminal im Stammverzeichnis des Projekts (wo sich die `package.json` befindet) und lade alle notwendigen Programmpakete herunter:
+```bash
+npm install
+```
+
+### 3. API Key konfigurieren (`.env`)
+Erstelle im Hauptverzeichnis des Projekts eine Textdatei mit dem Namen `.env` (falls diese noch nicht existiert) und trage deinen Gemini API-Schlüssel ein:
+```env
+GEMINI_API_KEY=dein_gemini_api_key_hier
+```
+*Hinweis: Der API-Key wird dank unserer Full-Stack-Architektur sicher auf dem Server verarbeitet und niemals an den Browser übertragen. Dies schützt deinen Key vor unbefugtem Zugriff und behebt CORS-Probleme.*
+
+### 4. Entwicklungs-Server starten
+Starte den lokalen Express+Vite-Entwicklungs-Server mit:
+```bash
+npm run dev
+```
+Der Server startet standardmäßig auf **Port 3000** (bzw. http://localhost:3000). Du kannst die App jetzt über deinen Browser aufrufen.
+
+### 5. Für Produktion bauen
+Wenn du die Anwendung für den Produktivbetrieb kompilieren möchtest, führe folgenden Befehl aus:
+```bash
+npm run build
+```
+Dadurch wird die React-Frontend-Anwendung in den Ordner `dist/` kompiliert und der Express-Server als optimierte, eigenständige Quelldatei in `dist/server.cjs` gebündelt.
+
+Danach kannst du die kompilierte App starten mit:
+```bash
+npm run start
+```
+
