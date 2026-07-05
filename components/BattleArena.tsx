@@ -579,7 +579,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ battle, characters, wo
       if (isWoozy) {
           const reviveThreshold = c.stats?.limit ?? 10;
           hpPct = (c.recoveryValue / reviveThreshold) * 100;
-          barColor = 'bg-purple-500';
+          barColor = 'bg-emerald-500';
       } else {
           hpPct = (c.currentHp / maxHp) * 100;
           if (hpPct < 25) barColor = 'bg-red-600';
@@ -666,7 +666,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ battle, characters, wo
           >
               <div className="absolute top-10 left-0 right-0 z-50 pointer-events-none flex flex-col items-center">
                   {myFloatingTexts.map(ft => (
-                      <div key={ft.id} className={`text-3xl font-black animate-[floatUp_1s_ease-out_forwards] stroke-black drop-shadow-md ${ft.type === 'damage' ? 'text-red-500' : ''} ${ft.type === 'crit' ? 'text-yellow-400 text-4xl' : ''} ${ft.type === 'miss' ? 'text-gray-400' : ''} ${ft.type === 'heal' ? 'text-green-500' : ''} ${ft.type === 'woozy' ? 'text-purple-400 text-2xl' : ''}`}>{ft.text}</div>
+                      <div key={ft.id} className={`text-3xl font-black animate-[floatUp_1s_ease-out_forwards] stroke-black drop-shadow-md ${ft.type === 'damage' ? 'text-red-500' : ''} ${ft.type === 'crit' ? 'text-yellow-400 text-4xl' : ''} ${ft.type === 'miss' ? 'text-gray-400' : ''} ${ft.type === 'heal' ? 'text-green-500' : ''} ${ft.type === 'woozy' ? 'text-emerald-400 text-2xl' : ''}`}>{ft.text}</div>
                   ))}
               </div>
               
@@ -686,7 +686,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ battle, characters, wo
                   )}
                   <div className="absolute top-0 right-0 flex flex-col gap-1 z-30">
                       {c.isShocked && !isWoozy && !isDead && <div className="text-yellow-400 bg-black/80 rounded-full p-2 animate-pulse"><Zap size={20}/></div>}
-                      {isWoozy && <div className="text-purple-400 bg-black/80 rounded-full p-2 animate-pulse"><Skull size={20}/></div>}
+                      {isWoozy && <div className="text-emerald-400 bg-black/80 rounded-full p-2 animate-pulse"><Skull size={20}/></div>}
                       {c.stunnedTurns && c.stunnedTurns > 0 && !isDead ? <div className="text-yellow-400 bg-black/80 rounded-full p-2 animate-pulse" title="Stunned"><Star size={20}/></div> : null}
                       {c.disarmedTurns && c.disarmedTurns > 0 && !isDead ? <div className="text-orange-400 bg-black/80 rounded-full p-2" title={`Disarmed (${c.disarmedTurns})`}><Hand size={20}/></div> : null}
                       {c.crippledTurns && c.crippledTurns > 0 && !isDead ? <div className="text-red-500 bg-black/80 rounded-full p-2" title={`Crippled (${c.crippledTurns})`}><Activity size={20}/></div> : null}
@@ -694,7 +694,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ battle, characters, wo
               </div>
               
               <div className="bg-black/70 px-3 py-1 rounded text-xs mt-1 text-center min-w-[90px] backdrop-blur-sm border border-gray-700/50 relative z-20">
-                  <div className={`font-bold truncate max-w-[120px] ${isWoozy ? 'text-purple-300' : 'text-gray-200'} ${isDead ? 'text-red-900 line-through' : ''}`}>{c.name}</div>
+                  <div className={`font-bold truncate max-w-[120px] ${isWoozy ? 'text-emerald-300' : 'text-gray-200'} ${isDead ? 'text-red-900 line-through' : ''}`}>{c.name}</div>
               </div>
 
               {/* HP / Recovery Bar */}
@@ -793,7 +793,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ battle, characters, wo
        <div className="absolute top-0 left-0 right-0 z-40 p-4 flex justify-between items-center bg-gradient-to-b from-black/90 to-transparent pointer-events-none">
            <h2 className="text-2xl font-bold flex items-center gap-2 text-red-500 drop-shadow-md"><Sword size={24}/> {battle.name}</h2>
            <div className="flex items-center gap-4 pointer-events-auto">
-               <button onClick={(e) => { e.stopPropagation(); setAutoMode(!autoMode); }} className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border transition-all ${autoMode ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-gray-800 border-gray-600 text-gray-400'}`}>
+               <button onClick={(e) => { e.stopPropagation(); setAutoMode(!autoMode); }} className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border transition-all ${autoMode ? 'bg-emerald-600 border-emerald-400 text-white' : 'bg-gray-800 border-gray-600 text-gray-400'}`}>
                    {autoMode ? <Play size={14} fill="currentColor"/> : <Pause size={14} fill="currentColor"/>} {autoMode ? 'AUTO' : 'MANUAL'}
                </button>
                <Button onClick={onExit} variant="secondary" className="text-xs py-1 border-red-900 text-red-200 hover:bg-red-900/20">Flee</Button>
@@ -850,10 +850,10 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ battle, characters, wo
                {/* Command Interface (Inside 16:9 Frame) */}
                {isPlayerTurn && (
                   <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-30 w-[95%] max-w-2xl pointer-events-auto">
-                     <div className="bg-black/70 backdrop-blur-md border border-indigo-500/30 rounded-2xl p-4 shadow-2xl animate-in slide-in-from-bottom-10 fade-in duration-300">
+                     <div className="bg-black/70 backdrop-blur-md border border-emerald-500/30 rounded-2xl p-4 shadow-2xl animate-in slide-in-from-bottom-10 fade-in duration-300">
                         <div className="flex items-center justify-between mb-3 border-b border-white/10 pb-2">
-                           <div className="text-lg font-bold text-indigo-300 flex items-center gap-2">
-                              <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse shadow-[0_0_10px_#6366f1]"></div> 
+                           <div className="text-lg font-bold text-emerald-300 flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_#10b981]"></div> 
                               Command: <span className="text-white">{activePlayerCombatant?.name}</span>
                            </div>
                            {!selectedTargetId && <div className="text-xs text-yellow-400 animate-pulse font-bold uppercase tracking-wider flex items-center gap-2"><Target size={14}/> Select Enemy Target</div>}
@@ -875,7 +875,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ battle, characters, wo
                                             className={`
                                                 flex flex-col items-center justify-center px-4 py-2 rounded-lg border transition-all min-w-[80px]
                                                 ${selectedZone === z.id 
-                                                    ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg scale-105' 
+                                                    ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg scale-105' 
                                                     : 'bg-gray-800/50 border-gray-600 text-gray-400 hover:bg-gray-700 hover:text-white'
                                                 }
                                             `}
@@ -948,11 +948,11 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ battle, characters, wo
          `}
          onClick={() => isGuideCollapsed && setIsGuideCollapsed(false)}
        >
-           <div className={`flex items-center justify-between p-2 ${!isGuideCollapsed ? 'border-b border-gray-700 bg-indigo-900/20' : 'h-full justify-center'}`}>
-               {!isGuideCollapsed && <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-widest flex items-center gap-2"><BookOpen size={12}/> Kampf-Handbuch</span>}
+           <div className={`flex items-center justify-between p-2 ${!isGuideCollapsed ? 'border-b border-gray-700 bg-emerald-900/20' : 'h-full justify-center'}`}>
+               {!isGuideCollapsed && <span className="text-[10px] font-bold text-emerald-300 uppercase tracking-widest flex items-center gap-2"><BookOpen size={12}/> Kampf-Handbuch</span>}
                <button 
                   onClick={(e) => { e.stopPropagation(); setIsGuideCollapsed(!isGuideCollapsed); }}
-                  className="text-indigo-300 hover:text-white transition-colors"
+                  className="text-emerald-300 hover:text-white transition-colors"
                   title="Battle Guide"
                >
                    {isGuideCollapsed ? <Info size={16}/> : <Minimize2 size={14}/>}
@@ -962,7 +962,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ battle, characters, wo
            {!isGuideCollapsed && (
                <div className="flex-1 overflow-y-auto p-4 font-sans text-xs space-y-4 custom-scrollbar bg-black/20 text-gray-300">
                    <div className="space-y-1">
-                      <h4 className="font-bold text-indigo-400 text-sm border-b border-gray-700 pb-1">1. Attribute</h4>
+                      <h4 className="font-bold text-emerald-400 text-sm border-b border-gray-700 pb-1">1. Attribute</h4>
                       <p><span className="text-white font-bold">GES (Geschick):</span> Bestimmt Initiative & Ausweichen (Verteidigungswert).</p>
                       <p><span className="text-white font-bold">PRA (Präzision):</span> Bestimmt Trefferchance.</p>
                       <p><span className="text-white font-bold">STR (Stärke):</span> Erhöht Durchschlag (Wund-Wahrscheinlichkeit).</p>
@@ -971,7 +971,7 @@ export const BattleArena: React.FC<BattleArenaProps> = ({ battle, characters, wo
                    </div>
                    {/* ... abbreviated guide text ... */}
                    <div className="space-y-1">
-                      <h4 className="font-bold text-indigo-400 text-sm border-b border-gray-700 pb-1">5. Schaden</h4>
+                      <h4 className="font-bold text-emerald-400 text-sm border-b border-gray-700 pb-1">5. Schaden</h4>
                       <p>Jede bestätigte Wunde verursacht den Waffenschaden (DMG).</p>
                    </div>
                </div>

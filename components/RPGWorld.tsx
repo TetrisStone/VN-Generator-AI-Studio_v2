@@ -5,7 +5,7 @@ import { Save, LogOut, MapPin, Book } from 'lucide-react';
 import { loadImage } from '../utils/imageStorage';
 
 // Default Icon (Speech Bubble)
-const DEFAULT_SCENE_ICON = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4IiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9IiM0ZjQ2ZTUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yMSAxNWEyIDIgMCAwIDEtMiAySDdsLTQgNFY1YTIgMiAwIDAgMSAyLTJoMTRhMiAyIDAgMCAxIDIgMnoiLz48L3N2Zz4=";
+const DEFAULT_SCENE_ICON = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4IiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9IiMwNTk2NjkiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yMSAxNWEyIDIgMCAwIDEtMiAySDdsLTQgNFY1YTIgMiAwIDAgMSAyLTJoMTRhMiAyIDAgMCAxIDIgMnoiLz48L3N2Zz4=";
 
 interface RPGWorldProps {
   characters: Character[];
@@ -279,7 +279,7 @@ export const RPGWorld: React.FC<RPGWorldProps> = ({
                   const size = (isHovered ? 12 : 8) * baseScale; // Drastically reduced
                   ctx.save();
                   ctx.translate(cx, cy);
-                  ctx.fillStyle = '#4f46e5'; // Indigo-600
+                  ctx.fillStyle = '#059669'; // Emerald-600
                   ctx.strokeStyle = 'white';
                   ctx.lineWidth = 2;
                   
@@ -405,8 +405,8 @@ export const RPGWorld: React.FC<RPGWorldProps> = ({
           {/* Header Overlay */}
           <div className="absolute top-4 left-4 md:top-6 md:left-6 z-10 pointer-events-none">
               <div className="bg-gray-900/60 px-3 py-1.5 md:px-4 md:py-2 rounded-lg border border-gray-700/50 backdrop-blur-sm shadow-xl pointer-events-auto inline-block">
-                <h1 className="text-sm md:text-base font-semibold text-indigo-300/90 flex items-center gap-1.5 md:gap-2 tracking-wide">
-                    <MapPin size={16} className="text-indigo-400/80"/>
+                <h1 className="text-sm md:text-base font-semibold text-emerald-300/90 flex items-center gap-1.5 md:gap-2 tracking-wide">
+                    <MapPin size={16} className="text-emerald-400/80"/>
                     {mapConfig.name.toUpperCase()}
                 </h1>
               </div>
@@ -425,7 +425,7 @@ export const RPGWorld: React.FC<RPGWorldProps> = ({
           {/* Controls */}
           <div className="absolute bottom-8 right-8 flex gap-3 z-10">
              <button onClick={onOpenJournal} className="bg-emerald-700 p-3 rounded-full hover:bg-emerald-600 text-white shadow-lg transition transform hover:scale-105 border border-emerald-500/30" title="Open Journal"><Book size={24} /></button>
-             <button onClick={handleManualSave} className="bg-indigo-600 p-3 rounded-full hover:bg-indigo-500 text-white shadow-lg transition transform hover:scale-105" title="Save Game"><Save size={24} /></button>
+             <button onClick={handleManualSave} className="bg-emerald-600 p-3 rounded-full hover:bg-emerald-500 text-white shadow-lg transition transform hover:scale-105" title="Save Game"><Save size={24} /></button>
              <button onClick={onExit} className="bg-gray-800 p-3 rounded-full hover:bg-red-900/80 text-white border border-gray-600 shadow-lg transition transform hover:scale-105" title="Exit to Editor"><LogOut size={24} /></button>
           </div>
       </div>

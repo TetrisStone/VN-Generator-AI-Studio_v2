@@ -110,7 +110,7 @@ const ImageField: React.FC<ImageFieldProps> = ({ label, value, onChange }) => {
             {value && imgSrc ? (
                 <div 
                     className={`relative group w-full h-24 rounded border flex items-center justify-center overflow-hidden transition-colors ${
-                        isDragging ? 'bg-indigo-900 border-indigo-500' : 'bg-gray-900 border-gray-700'
+                        isDragging ? 'bg-emerald-900 border-emerald-500' : 'bg-gray-900 border-gray-700'
                     }`}
                     onDrop={handleDrop}
                     onDragOver={handleDragOver}
@@ -118,7 +118,7 @@ const ImageField: React.FC<ImageFieldProps> = ({ label, value, onChange }) => {
                 >
                     <img src={imgSrc} className="w-full h-full object-contain" alt={label} />
                     <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                         <button onClick={() => inputRef.current?.click()} className="p-2 bg-indigo-600 rounded text-white hover:bg-indigo-500 transition-colors shadow-lg" title="Change Image">
+                         <button onClick={() => inputRef.current?.click()} className="p-2 bg-emerald-600 rounded text-white hover:bg-emerald-500 transition-colors shadow-lg" title="Change Image">
                             <Upload size={16}/>
                          </button>
                          <button onClick={handleRemove} className="p-2 bg-red-600 rounded text-white hover:bg-red-500 transition-colors shadow-lg" title="Remove Image">
@@ -139,7 +139,7 @@ const ImageField: React.FC<ImageFieldProps> = ({ label, value, onChange }) => {
                     onDragLeave={handleDragLeave}
                     className={`w-full h-24 flex flex-col items-center justify-center transition-all gap-2 group rounded border border-dashed ${
                         isDragging 
-                            ? 'bg-indigo-900/50 border-indigo-400 text-indigo-300' 
+                            ? 'bg-emerald-900/50 border-emerald-400 text-emerald-300' 
                             : 'bg-gray-800/50 hover:bg-gray-800 border-gray-600 hover:border-gray-500 text-gray-500'
                     }`}
                 >
@@ -201,7 +201,7 @@ const VideoField: React.FC<VideoFieldProps> = ({ label, value, onChange }) => {
                         <Video size={24} className="text-white opacity-80"/>
                     </div>
                     <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                         <button onClick={() => inputRef.current?.click()} className="p-2 bg-indigo-600 rounded text-white hover:bg-indigo-500 transition-colors shadow-lg" title="Change Video">
+                         <button onClick={() => inputRef.current?.click()} className="p-2 bg-emerald-600 rounded text-white hover:bg-emerald-500 transition-colors shadow-lg" title="Change Video">
                             <Upload size={16}/>
                          </button>
                          <button onClick={() => onChange(null)} className="p-2 bg-red-600 rounded text-white hover:bg-red-500 transition-colors shadow-lg" title="Remove Video">
@@ -265,7 +265,7 @@ const AudioField: React.FC<AudioFieldProps> = ({ label, value, onChange }) => {
                         <span className="text-xs text-gray-300 truncate">Audio Selected</span>
                     </div>
                     <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 px-2 border border-blue-500/50 rounded">
-                         <button onClick={() => inputRef.current?.click()} className="p-1.5 bg-indigo-600 rounded text-white hover:bg-indigo-500 transition-colors shadow-lg flex items-center gap-1" title="Change Audio">
+                         <button onClick={() => inputRef.current?.click()} className="p-1.5 bg-emerald-600 rounded text-white hover:bg-emerald-500 transition-colors shadow-lg flex items-center gap-1" title="Change Audio">
                             <Upload size={14}/>
                          </button>
                          <button onClick={() => onChange(null)} className="p-1.5 bg-red-600 rounded text-white hover:bg-red-500 transition-colors shadow-lg flex items-center gap-1" title="Remove Audio">
@@ -530,7 +530,7 @@ const CharacterEditor: React.FC<CharacterEditorProps> = ({ character, onChange, 
             
             {/* Stats Editor for Combat */}
             <div className="bg-gray-800 p-4 rounded border border-gray-700">
-                <h4 className="font-bold text-indigo-400 mb-4 flex items-center gap-2"><Sword size={16}/> Combat Stats</h4>
+                <h4 className="font-bold text-emerald-400 mb-4 flex items-center gap-2"><Sword size={16}/> Combat Stats</h4>
                 {!character.stats ? (
                     <Button onClick={() => onChange({ stats: { pra: 3, str: 3, wid: 3, ges: 3, wil: 3, hp: 20, maxHp: 20, limit: 10, recoveryRate: 5, weapon: { name: 'Fists', at: 3, mod: 0, dmg: 1, cap: null } } })}>Enable Combat Stats</Button>
                 ) : (
@@ -553,8 +553,8 @@ const CharacterEditor: React.FC<CharacterEditorProps> = ({ character, onChange, 
                                  <input type="number" className="w-full bg-gray-900 border border-gray-600 rounded p-1 text-white" value={character.stats.limit} onChange={e => onChange({ stats: { ...character.stats!, limit: parseInt(e.target.value) } })} />
                              </div>
                              <div>
-                                 <label className="text-xs font-bold text-gray-500 text-purple-400">Recovery</label>
-                                 <input type="number" className="w-full bg-gray-900 border border-purple-500/50 rounded p-1 text-white" value={character.stats.recoveryRate || 5} onChange={e => onChange({ stats: { ...character.stats!, recoveryRate: parseInt(e.target.value) } })} />
+                                 <label className="text-xs font-bold text-gray-500 text-emerald-400">Recovery</label>
+                                 <input type="number" className="w-full bg-gray-900 border border-emerald-500/50 rounded p-1 text-white" value={character.stats.recoveryRate || 5} onChange={e => onChange({ stats: { ...character.stats!, recoveryRate: parseInt(e.target.value) } })} />
                              </div>
                         </div>
 
@@ -600,9 +600,9 @@ const CharacterEditor: React.FC<CharacterEditorProps> = ({ character, onChange, 
 
                         {/* Woozy & Death Visuals */}
                          <div className="border-t border-gray-700 pt-4 mt-2">
-                            <label className="text-xs font-bold text-purple-400 uppercase mb-2 block">Woozy / Death Visuals</label>
+                            <label className="text-xs font-bold text-emerald-400 uppercase mb-2 block">Woozy / Death Visuals</label>
                             <div className="grid grid-cols-2 gap-4 mb-4">
-                                <div className="p-2 border border-purple-500/20 rounded bg-purple-900/10">
+                                <div className="p-2 border border-emerald-500/20 rounded bg-emerald-900/10">
                                     <div className="text-[10px] font-bold text-gray-500 uppercase mb-2">Woozy Loop (2-4 Frames)</div>
                                     <div className="grid grid-cols-2 gap-2">
                                         {[0,1,2,3].map(i => (
@@ -685,7 +685,7 @@ const SceneEditor: React.FC<SceneEditorProps> = ({ scene, allScenes, allBattles,
     return (
         <div className="space-y-6 max-w-3xl bg-gray-900/50 p-6 rounded-xl border border-gray-800">
             <div className="flex justify-between items-center">
-                <h3 className="text-xl font-bold text-indigo-400">Editing: {scene.name}</h3>
+                <h3 className="text-xl font-bold text-emerald-400">Editing: {scene.name}</h3>
                 <div className="flex gap-2">
                     <label className="flex items-center gap-2 text-xs bg-gray-800 px-3 py-1 rounded border border-gray-700">
                         <input type="checkbox" checked={scene.isRepeatable} onChange={e => onChange({ isRepeatable: e.target.checked })} />
@@ -721,13 +721,13 @@ const SceneEditor: React.FC<SceneEditorProps> = ({ scene, allScenes, allBattles,
             </div>
 
             {/* AI CONTEXT SECTION (RESTORED) */}
-            <div className="space-y-3 border-l-2 border-indigo-500/30 pl-4 my-4 bg-indigo-900/10 p-3 rounded-r-lg">
-                 <h4 className="text-sm font-bold text-indigo-400 flex items-center gap-2"><EyeOff size={14}/> AI Context (Hidden from Player)</h4>
+            <div className="space-y-3 border-l-2 border-emerald-500/30 pl-4 my-4 bg-emerald-900/10 p-3 rounded-r-lg">
+                 <h4 className="text-sm font-bold text-emerald-400 flex items-center gap-2"><EyeOff size={14}/> AI Context (Hidden from Player)</h4>
                  
                  <div>
                     <label className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-2"><Terminal size={10}/> Internal Instructions / Logic</label>
                     <textarea 
-                        className="w-full bg-gray-900 border border-gray-700 rounded p-2 h-20 text-xs text-indigo-200 font-mono focus:border-indigo-500 outline-none" 
+                        className="w-full bg-gray-900 border border-gray-700 rounded p-2 h-20 text-xs text-emerald-200 font-mono focus:border-emerald-500 outline-none" 
                         placeholder="e.g. The guard is secretly bribed. Speak in a whisper. Do not mention the artifact yet."
                         value={scene.aiInstructions || ''} 
                         onChange={e => onChange({ aiInstructions: e.target.value })} 
@@ -738,7 +738,7 @@ const SceneEditor: React.FC<SceneEditorProps> = ({ scene, allScenes, allBattles,
                      <div>
                         <label className="text-[10px] font-bold text-gray-500 uppercase">Sensory Details</label>
                         <textarea 
-                            className="w-full bg-gray-900 border border-gray-700 rounded p-2 h-16 text-xs text-gray-300 focus:border-indigo-500 outline-none" 
+                            className="w-full bg-gray-900 border border-gray-700 rounded p-2 h-16 text-xs text-gray-300 focus:border-emerald-500 outline-none" 
                             placeholder="Smells, sounds, temperature, lighting..."
                             value={scene.sensoryDetails || ''} 
                             onChange={e => onChange({ sensoryDetails: e.target.value })} 
@@ -747,7 +747,7 @@ const SceneEditor: React.FC<SceneEditorProps> = ({ scene, allScenes, allBattles,
                      <div>
                         <label className="text-[10px] font-bold text-gray-500 uppercase">Environment / Layout</label>
                         <textarea 
-                            className="w-full bg-gray-900 border border-gray-700 rounded p-2 h-16 text-xs text-gray-300 focus:border-indigo-500 outline-none" 
+                            className="w-full bg-gray-900 border border-gray-700 rounded p-2 h-16 text-xs text-gray-300 focus:border-emerald-500 outline-none" 
                             placeholder="Room size, exits, object placement, cover..."
                             value={scene.environmentDetails || ''} 
                             onChange={e => onChange({ environmentDetails: e.target.value })} 
@@ -762,12 +762,12 @@ const SceneEditor: React.FC<SceneEditorProps> = ({ scene, allScenes, allBattles,
             </div>
 
             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-                <label className="flex items-center gap-2 text-sm font-bold text-indigo-400 mb-4"><Users size={18} /> CHARACTERS & ROLES</label>
+                <label className="flex items-center gap-2 text-sm font-bold text-emerald-400 mb-4"><Users size={18} /> CHARACTERS & ROLES</label>
                 <div className="space-y-2">
                     {characters.map((c) => {
                         const inScene = scene.characters.find((sc) => sc.characterId === c.id);
                         return (
-                            <div key={c.id} className={`flex items-center gap-3 p-2 rounded border ${inScene ? 'bg-indigo-900/30 border-indigo-500' : 'bg-gray-900 border-gray-700 opacity-60'}`}>
+                            <div key={c.id} className={`flex items-center gap-3 p-2 rounded border ${inScene ? 'bg-emerald-900/30 border-emerald-500' : 'bg-gray-900 border-gray-700 opacity-60'}`}>
                                 <input 
                                     type="checkbox" 
                                     checked={!!inScene} 
@@ -781,7 +781,7 @@ const SceneEditor: React.FC<SceneEditorProps> = ({ scene, allScenes, allBattles,
                                 />
                                 <div className="w-24 font-bold truncate text-white">{c.name}</div>
                                 <input 
-                                    className="flex-1 bg-transparent border-b border-gray-600 text-xs focus:border-indigo-500 outline-none text-white" 
+                                    className="flex-1 bg-transparent border-b border-gray-600 text-xs focus:border-emerald-500 outline-none text-white" 
                                     placeholder="Role in this scene..."
                                     disabled={!inScene}
                                     value={inScene?.roleInScene || ''}
@@ -797,7 +797,7 @@ const SceneEditor: React.FC<SceneEditorProps> = ({ scene, allScenes, allBattles,
             </div>
 
             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-                <label className="flex items-center gap-2 text-sm font-bold text-indigo-400 mb-4"><Book size={18} /> LORE SCOPING</label>
+                <label className="flex items-center gap-2 text-sm font-bold text-emerald-400 mb-4"><Book size={18} /> LORE SCOPING</label>
                 
                 {/* Lore-Scoping: Factions */}
                 <details className="bg-gray-900 rounded-lg p-3">
@@ -1021,7 +1021,7 @@ const MapEditor: React.FC<MapEditorProps> = ({ map, scenes, characters, battles,
                 {map.spots.map(spot => (
                     <div 
                         key={spot.id} 
-                        className="absolute w-6 h-6 -ml-3 -mt-3 bg-indigo-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center text-xs font-bold z-20 pointer-events-none"
+                        className="absolute w-6 h-6 -ml-3 -mt-3 bg-emerald-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center text-xs font-bold z-20 pointer-events-none"
                         style={{ left: `${spot.x}%`, top: `${spot.y}%` }}
                     >
                         {spot.type[0].toUpperCase()}
@@ -1150,7 +1150,7 @@ const BattleEditor: React.FC<BattleEditorProps> = ({ battle, characters, chapter
             <div className="grid grid-cols-2 gap-8">
                 {/* Player Team */}
                 <div className="bg-gray-800 p-4 rounded border border-gray-700">
-                    <h4 className="font-bold text-indigo-400 mb-2 flex items-center gap-2"><Users size={16}/> Player Team</h4>
+                    <h4 className="font-bold text-emerald-400 mb-2 flex items-center gap-2"><Users size={16}/> Player Team</h4>
                     <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
                         {characters.map(c => (
                             <label key={c.id} className="flex items-center gap-2 bg-gray-900 p-2 rounded border border-gray-700 cursor-pointer hover:bg-gray-800">
@@ -1318,17 +1318,17 @@ export const Editor: React.FC<EditorProps> = (props) => {
             {/* Sidebar */}
             <div className={`${isSidebarOpen ? 'w-64' : 'w-0'} md:w-64 transition-all duration-300 ease-in-out bg-gray-900 border-r border-gray-800 flex flex-col flex-shrink-0 z-40 relative md:static absolute inset-y-0 left-0 overflow-hidden`}>
                 <div className="p-3 md:p-4 border-b border-gray-800 flex justify-between items-center whitespace-nowrap min-w-[16rem]">
-                    <h1 className="text-lg md:text-xl font-bold text-indigo-500 flex items-center gap-2"><Layout size={18}/> VN Creator</h1>
+                    <h1 className="text-lg md:text-xl font-bold text-emerald-500 flex items-center gap-2"><Layout size={18}/> VN Creator</h1>
                     <button className="md:hidden text-gray-500" onClick={() => setIsSidebarOpen(false)}><XCircle size={20}/></button>
                 </div>
                 <div className="flex-1 overflow-y-auto py-2 md:py-4 space-y-1 min-w-[16rem]">
-                    <button onClick={() => { setTab('home'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'home' ? 'bg-indigo-900/30 text-indigo-400 border-r-2 border-indigo-500' : 'text-gray-400 hover:bg-gray-800'}`}><Play size={16}/> Home Settings</button>
-                    <button onClick={() => { setTab('world'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'world' ? 'bg-indigo-900/30 text-indigo-400 border-r-2 border-indigo-500' : 'text-gray-400 hover:bg-gray-800'}`}><Book size={16}/> World & Lore</button>
-                    <button onClick={() => { setTab('chapters'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'chapters' ? 'bg-indigo-900/30 text-indigo-400 border-r-2 border-indigo-500' : 'text-gray-400 hover:bg-gray-800'}`}><Book size={16}/> Chapters</button>
-                    <button onClick={() => { setTab('chars'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'chars' ? 'bg-indigo-900/30 text-indigo-400 border-r-2 border-indigo-500' : 'text-gray-400 hover:bg-gray-800'}`}><Users size={16}/> Characters</button>
-                    <button onClick={() => { setTab('scenes'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'scenes' ? 'bg-indigo-900/30 text-indigo-400 border-r-2 border-indigo-500' : 'text-gray-400 hover:bg-gray-800'}`}><Monitor size={16}/> Scenes</button>
-                    <button onClick={() => { setTab('maps'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'maps' ? 'bg-indigo-900/30 text-indigo-400 border-r-2 border-indigo-500' : 'text-gray-400 hover:bg-gray-800'}`}><MapIcon size={16}/> Maps</button>
-                    <button onClick={() => { setTab('battles'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'battles' ? 'bg-indigo-900/30 text-indigo-400 border-r-2 border-indigo-500' : 'text-gray-400 hover:bg-gray-800'}`}><Target size={16}/> Battles</button>
+                    <button onClick={() => { setTab('home'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'home' ? 'bg-emerald-900/30 text-emerald-400 border-r-2 border-emerald-500' : 'text-gray-400 hover:bg-gray-800'}`}><Play size={16}/> Home Settings</button>
+                    <button onClick={() => { setTab('world'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'world' ? 'bg-emerald-900/30 text-emerald-400 border-r-2 border-emerald-500' : 'text-gray-400 hover:bg-gray-800'}`}><Book size={16}/> World & Lore</button>
+                    <button onClick={() => { setTab('chapters'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'chapters' ? 'bg-emerald-900/30 text-emerald-400 border-r-2 border-emerald-500' : 'text-gray-400 hover:bg-gray-800'}`}><Book size={16}/> Chapters</button>
+                    <button onClick={() => { setTab('chars'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'chars' ? 'bg-emerald-900/30 text-emerald-400 border-r-2 border-emerald-500' : 'text-gray-400 hover:bg-gray-800'}`}><Users size={16}/> Characters</button>
+                    <button onClick={() => { setTab('scenes'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'scenes' ? 'bg-emerald-900/30 text-emerald-400 border-r-2 border-emerald-500' : 'text-gray-400 hover:bg-gray-800'}`}><Monitor size={16}/> Scenes</button>
+                    <button onClick={() => { setTab('maps'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'maps' ? 'bg-emerald-900/30 text-emerald-400 border-r-2 border-emerald-500' : 'text-gray-400 hover:bg-gray-800'}`}><MapIcon size={16}/> Maps</button>
+                    <button onClick={() => { setTab('battles'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'battles' ? 'bg-emerald-900/30 text-emerald-400 border-r-2 border-emerald-500' : 'text-gray-400 hover:bg-gray-800'}`}><Target size={16}/> Battles</button>
                 </div>
             </div>
             
@@ -1343,7 +1343,7 @@ export const Editor: React.FC<EditorProps> = (props) => {
                     <div className="max-w-3xl mx-auto w-full space-y-8 overflow-y-auto h-full pb-12 pt-4">
                         <div className="text-center mb-8">
                             <h2 className="text-3xl font-bold text-white mb-2 flex items-center justify-center gap-3">
-                                <Layout size={32} className="text-indigo-500" /> VN Creator UI
+                                <Layout size={32} className="text-emerald-500" /> VN Creator UI
                             </h2>
                             <p className="text-gray-400">Manage your project and launch the game.</p>
                         </div>
@@ -1371,12 +1371,12 @@ export const Editor: React.FC<EditorProps> = (props) => {
                             </div>
 
                             <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 space-y-4 md:col-span-2">
-                                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><Download className="text-purple-500" size={20}/> Project Data (Editor)</h3>
+                                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><Download className="text-emerald-500" size={20}/> Project Data (Editor)</h3>
                                 <p className="text-xs text-gray-400 mb-4">Export or import the full VN Creator project (characters, scenes, chapters, lore, maps, battles). This does not include game progress.</p>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <Button variant="secondary" onClick={props.onExportProject} title="Export Editor Project" className="py-3 justify-center font-semibold text-purple-400 border-purple-500/30 hover:bg-purple-900/20"><Download size={18} className="mr-2"/> Export Full Project</Button>
+                                    <Button variant="secondary" onClick={props.onExportProject} title="Export Editor Project" className="py-3 justify-center font-semibold text-emerald-400 border-emerald-500/30 hover:bg-emerald-900/20"><Download size={18} className="mr-2"/> Export Full Project</Button>
                                     <div className="relative">
-                                        <Button variant="secondary" className="w-full py-3 justify-center font-semibold text-purple-400 border-purple-500/30 hover:bg-purple-900/20" title="Import Editor Project"><Upload size={18} className="mr-2"/> Import Full Project</Button>
+                                        <Button variant="secondary" className="w-full py-3 justify-center font-semibold text-emerald-400 border-emerald-500/30 hover:bg-emerald-900/20" title="Import Editor Project"><Upload size={18} className="mr-2"/> Import Full Project</Button>
                                         <input type="file" onChange={handleImport} className="absolute inset-0 opacity-0 cursor-pointer" accept=".json,.zip"/>
                                     </div>
                                 </div>
@@ -1390,7 +1390,7 @@ export const Editor: React.FC<EditorProps> = (props) => {
                                     <div>
                                         <label className="text-xs font-bold text-gray-500 uppercase">Provider</label>
                                         <select 
-                                            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white h-[42px] focus:border-indigo-500 outline-none"
+                                            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white h-[42px] focus:border-emerald-500 outline-none"
                                             value={props.worldInfo.llmProvider || 'gemini'}
                                             onChange={e => props.onUpdateWorldInfo({ ...props.worldInfo, llmProvider: e.target.value as 'gemini' | 'ollama' })}
                                         >
@@ -1402,7 +1402,7 @@ export const Editor: React.FC<EditorProps> = (props) => {
                                         <div>
                                             <label className="text-xs font-bold text-gray-500 uppercase">Model</label>
                                             <select 
-                                                className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white h-[42px] focus:border-indigo-500 outline-none"
+                                                className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white h-[42px] focus:border-emerald-500 outline-none"
                                                 value={props.worldInfo.llmModel || 'gemini-3.5-flash'}
                                                 onChange={e => props.onUpdateWorldInfo({ ...props.worldInfo, llmModel: e.target.value })}
                                             >
@@ -1416,7 +1416,7 @@ export const Editor: React.FC<EditorProps> = (props) => {
                                             <label className="text-xs font-bold text-gray-500 uppercase">Model</label>
                                             <input 
                                                 type="text"
-                                                className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white h-[42px] focus:border-indigo-500 outline-none"
+                                                className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white h-[42px] focus:border-emerald-500 outline-none"
                                                 value={props.worldInfo.llmModel || 'llama3'}
                                                 placeholder="e.g. llama3, mistral"
                                                 onChange={e => props.onUpdateWorldInfo({ ...props.worldInfo, llmModel: e.target.value })}
@@ -1428,7 +1428,7 @@ export const Editor: React.FC<EditorProps> = (props) => {
                                             <label className="text-xs font-bold text-gray-500 uppercase">Ollama URL</label>
                                             <input 
                                                 type="text"
-                                                className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white h-[42px] focus:border-indigo-500 outline-none"
+                                                className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white h-[42px] focus:border-emerald-500 outline-none"
                                                 value={props.worldInfo.ollamaUrl || 'http://localhost:11434'}
                                                 placeholder="http://localhost:11434"
                                                 onChange={e => props.onUpdateWorldInfo({ ...props.worldInfo, ollamaUrl: e.target.value })}
@@ -1450,7 +1450,7 @@ export const Editor: React.FC<EditorProps> = (props) => {
                                 <div>
                                     <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2 mb-1"><Book size={14}/> World Description</label>
                                     <textarea 
-                                        className="w-full bg-gray-900 border border-gray-700 rounded p-3 h-32 text-white focus:border-indigo-500 outline-none" 
+                                        className="w-full bg-gray-900 border border-gray-700 rounded p-3 h-32 text-white focus:border-emerald-500 outline-none" 
                                         placeholder="General setting, atmosphere, time period, and major themes..."
                                         value={props.worldInfo.description} 
                                         onChange={e => props.onUpdateWorldInfo({ ...props.worldInfo, description: e.target.value })} 
@@ -1458,9 +1458,9 @@ export const Editor: React.FC<EditorProps> = (props) => {
                                 </div>
 
                                 <div>
-                                    <label className="text-xs font-bold text-indigo-400 uppercase flex items-center gap-2 mb-1"><Terminal size={14}/> System Prompt (AI Instructions)</label>
+                                    <label className="text-xs font-bold text-emerald-400 uppercase flex items-center gap-2 mb-1"><Terminal size={14}/> System Prompt (AI Instructions)</label>
                                     <textarea 
-                                        className="w-full bg-gray-900 border border-indigo-900/50 rounded p-3 h-32 text-indigo-100 font-mono text-sm focus:border-indigo-500 outline-none" 
+                                        className="w-full bg-gray-900 border border-emerald-900/50 rounded p-3 h-32 text-emerald-100 font-mono text-sm focus:border-emerald-500 outline-none" 
                                         placeholder="Technical instructions for the AI (e.g. 'Speak in Shakespearean English', 'Always be sarcastic', 'Focus on horror elements')..."
                                         value={props.worldInfo.systemInstruction || ''} 
                                         onChange={e => props.onUpdateWorldInfo({ ...props.worldInfo, systemInstruction: e.target.value })} 
@@ -1572,7 +1572,7 @@ export const Editor: React.FC<EditorProps> = (props) => {
                             }}><Plus size={14}/> Add Chapter</Button>
                             <div className="space-y-2">
                                 {props.chapters.map(c => (
-                                    <div key={c.id} onClick={() => setSelectedId(c.id)} className={`p-2 md:p-3 rounded cursor-pointer border text-sm ${selectedId === c.id ? 'bg-indigo-900/50 border-indigo-500' : 'bg-gray-900 border-gray-800 hover:bg-gray-800'}`}>
+                                    <div key={c.id} onClick={() => setSelectedId(c.id)} className={`p-2 md:p-3 rounded cursor-pointer border text-sm ${selectedId === c.id ? 'bg-emerald-900/50 border-emerald-500' : 'bg-gray-900 border-gray-800 hover:bg-gray-800'}`}>
                                         <div className="font-bold text-white truncate">{c.name || 'Unnamed Chapter'}</div>
                                     </div>
                                 ))}
@@ -1615,7 +1615,7 @@ export const Editor: React.FC<EditorProps> = (props) => {
                              }}><Plus size={14}/> Add Character</Button>
                              <div className="space-y-2">
                                  {props.characters.map(c => (
-                                     <div key={c.id} onClick={() => setSelectedId(c.id)} className={`p-2 md:p-3 rounded cursor-pointer border text-sm ${selectedId === c.id ? 'bg-indigo-900/50 border-indigo-500' : 'bg-gray-900 border-gray-800 hover:bg-gray-800'}`}>
+                                     <div key={c.id} onClick={() => setSelectedId(c.id)} className={`p-2 md:p-3 rounded cursor-pointer border text-sm ${selectedId === c.id ? 'bg-emerald-900/50 border-emerald-500' : 'bg-gray-900 border-gray-800 hover:bg-gray-800'}`}>
                                          <div className="font-bold text-white">{c.name}</div>
                                      </div>
                                  ))}
@@ -1624,7 +1624,7 @@ export const Editor: React.FC<EditorProps> = (props) => {
                         <div className={`flex-1 overflow-y-auto ${!selectedId ? 'hidden md:block' : 'block'}`}>
                              {selectedId && props.characters.find(c => c.id === selectedId) && (
                                  <div className="flex flex-col h-full">
-                                     <button className="md:hidden mb-4 text-indigo-400 font-bold flex items-center gap-1.5" onClick={() => setSelectedId(null)}>
+                                     <button className="md:hidden mb-4 text-emerald-400 font-bold flex items-center gap-1.5" onClick={() => setSelectedId(null)}>
                                          <ArrowLeft size={16}/> Back to Characters
                                      </button>
                                      <CharacterEditor 
@@ -1648,7 +1648,7 @@ export const Editor: React.FC<EditorProps> = (props) => {
                              <div className="flex gap-2 mb-2">
                                 <Button className="flex-1 py-1.5 text-sm" onClick={() => { const id = crypto.randomUUID(); props.onUpdateScenes([...props.scenes, { id, name: 'New Scene', description: '', goal: '', characters: [], backgroundSrc: null }]); setSelectedId(id); }}><Plus size={14}/> Add Scene</Button>
                                 <Button 
-                                    className="bg-purple-600 hover:bg-purple-500 shadow-purple-500/20 py-1.5" 
+                                    className="bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20 py-1.5" 
                                     title="Auto-Generate Scene from Story Log"
                                     onClick={handleGenerateScene}
                                     disabled={isGenerating}
@@ -1664,12 +1664,12 @@ export const Editor: React.FC<EditorProps> = (props) => {
                                 onChange={e => setScenePrompt(e.target.value)}
                              />
                              
-                             <div className="space-y-2">{props.scenes.map(s => (<div key={s.id} onClick={() => setSelectedId(s.id)} className={`p-2 md:p-3 rounded cursor-pointer border text-sm ${selectedId === s.id ? 'bg-indigo-900/50 border-indigo-500' : 'bg-gray-900 border-gray-800 hover:bg-gray-800'}`}><div className="font-bold text-white truncate">{s.name}</div><div className="text-xs text-gray-500 truncate">{s.goal || 'No goal'}</div></div>))}</div>
+                             <div className="space-y-2">{props.scenes.map(s => (<div key={s.id} onClick={() => setSelectedId(s.id)} className={`p-2 md:p-3 rounded cursor-pointer border text-sm ${selectedId === s.id ? 'bg-emerald-900/50 border-emerald-500' : 'bg-gray-900 border-gray-800 hover:bg-gray-800'}`}><div className="font-bold text-white truncate">{s.name}</div><div className="text-xs text-gray-500 truncate">{s.goal || 'No goal'}</div></div>))}</div>
                         </div>
                         <div className={`flex-1 overflow-y-auto ${!selectedId ? 'hidden md:block' : 'block'}`}>
                             {selectedId && props.scenes.find(s => s.id === selectedId) && (
                                 <div className="flex flex-col h-full">
-                                     <button className="md:hidden mb-4 text-indigo-400 font-bold flex items-center gap-1.5" onClick={() => setSelectedId(null)}>
+                                     <button className="md:hidden mb-4 text-emerald-400 font-bold flex items-center gap-1.5" onClick={() => setSelectedId(null)}>
                                          <ArrowLeft size={16}/> Back to Scenes
                                      </button>
                                      <SceneEditor key={selectedId} scene={props.scenes.find(s => s.id === selectedId)!} allScenes={props.scenes} allBattles={props.battles} allMaps={props.maps} characters={props.characters} chapters={props.chapters} worldInfo={props.worldInfo} onChange={(u) => props.onUpdateScenes(props.scenes.map(x => x.id === selectedId ? { ...x, ...u } : x))} onDelete={() => { props.onUpdateScenes(props.scenes.filter(x => x.id !== selectedId)); setSelectedId(null); }} />
@@ -1683,12 +1683,12 @@ export const Editor: React.FC<EditorProps> = (props) => {
                      <div className="flex flex-col md:flex-row h-full gap-4 md:gap-6">
                         <div className={`w-full md:w-1/3 border-none md:border-r border-gray-800 pb-4 md:pb-0 md:pr-4 overflow-y-auto ${selectedId ? 'hidden md:block' : 'block'}`}>
                              <Button className="w-full mb-4 py-1.5 text-sm" onClick={() => { const id = crypto.randomUUID(); props.onUpdateMaps([...props.maps, { id, name: 'New Map', backgroundSrc: null, spots: [] }]); setSelectedId(id); }}><Plus size={14}/> Add Map</Button>
-                             <div className="space-y-2">{props.maps.map(m => (<div key={m.id} onClick={() => setSelectedId(m.id)} className={`p-2 md:p-3 rounded cursor-pointer border text-sm ${selectedId === m.id ? 'bg-indigo-900/50 border-indigo-500' : 'bg-gray-900 border-gray-800 hover:bg-gray-800'}`}><div className="font-bold text-white">{m.name}</div></div>))}</div>
+                             <div className="space-y-2">{props.maps.map(m => (<div key={m.id} onClick={() => setSelectedId(m.id)} className={`p-2 md:p-3 rounded cursor-pointer border text-sm ${selectedId === m.id ? 'bg-emerald-900/50 border-emerald-500' : 'bg-gray-900 border-gray-800 hover:bg-gray-800'}`}><div className="font-bold text-white">{m.name}</div></div>))}</div>
                         </div>
                         <div className={`flex-1 overflow-y-auto ${!selectedId ? 'hidden md:block' : 'block'}`}>
                             {selectedId && props.maps.find(m => m.id === selectedId) && (
                                 <div className="flex flex-col h-full">
-                                    <button className="md:hidden mb-4 text-indigo-400 font-bold flex items-center gap-1.5" onClick={() => setSelectedId(null)}>
+                                    <button className="md:hidden mb-4 text-emerald-400 font-bold flex items-center gap-1.5" onClick={() => setSelectedId(null)}>
                                         <ArrowLeft size={16}/> Back to Maps
                                     </button>
                                     <MapEditor key={selectedId} map={props.maps.find(m => m.id === selectedId)!} scenes={props.scenes} characters={props.characters} battles={props.battles} allMaps={props.maps} onChange={(u) => props.onUpdateMaps(props.maps.map(x => x.id === selectedId ? { ...x, ...u } : x))} onDelete={() => { props.onUpdateMaps(props.maps.filter(x => x.id !== selectedId)); setSelectedId(null); }} />
@@ -1701,12 +1701,12 @@ export const Editor: React.FC<EditorProps> = (props) => {
                      <div className="flex flex-col md:flex-row h-full gap-4 md:gap-6">
                         <div className={`w-full md:w-1/3 border-none md:border-r border-gray-800 pb-4 md:pb-0 md:pr-4 overflow-y-auto ${selectedId ? 'hidden md:block' : 'block'}`}>
                              <Button className="w-full mb-4 py-1.5 text-sm" onClick={() => { const id = crypto.randomUUID(); props.onUpdateBattles([...props.battles, { id, name: 'New Battle', backgroundSrc: null, playerCharacterIds: [], enemyCharacterIds: [], isRepeatable: false }]); setSelectedId(id); }}><Plus size={14}/> Add Battle</Button>
-                             <div className="space-y-2">{props.battles.map(b => (<div key={b.id} onClick={() => setSelectedId(b.id)} className={`p-2 md:p-3 rounded cursor-pointer border text-sm ${selectedId === b.id ? 'bg-indigo-900/50 border-indigo-500' : 'bg-gray-900 border-gray-800 hover:bg-gray-800'}`}><div className="font-bold text-white">{b.name}</div></div>))}</div>
+                             <div className="space-y-2">{props.battles.map(b => (<div key={b.id} onClick={() => setSelectedId(b.id)} className={`p-2 md:p-3 rounded cursor-pointer border text-sm ${selectedId === b.id ? 'bg-emerald-900/50 border-emerald-500' : 'bg-gray-900 border-gray-800 hover:bg-gray-800'}`}><div className="font-bold text-white">{b.name}</div></div>))}</div>
                         </div>
                         <div className={`flex-1 overflow-y-auto ${!selectedId ? 'hidden md:block' : 'block'}`}>
                             {selectedId && props.battles.find(b => b.id === selectedId) && (
                                 <div className="flex flex-col h-full">
-                                    <button className="md:hidden mb-4 text-indigo-400 font-bold flex items-center gap-1.5" onClick={() => setSelectedId(null)}>
+                                    <button className="md:hidden mb-4 text-emerald-400 font-bold flex items-center gap-1.5" onClick={() => setSelectedId(null)}>
                                         <ArrowLeft size={16}/> Back to Battles
                                     </button>
                                     <BattleEditor key={selectedId} battle={props.battles.find(b => b.id === selectedId)!} characters={props.characters} chapters={props.chapters} allScenes={props.scenes} allBattles={props.battles} allMaps={props.maps} onChange={(u) => props.onUpdateBattles(props.battles.map(x => x.id === selectedId ? { ...x, ...u } : x))} onDelete={() => { props.onUpdateBattles(props.battles.filter(x => x.id !== selectedId)); setSelectedId(null); }} />

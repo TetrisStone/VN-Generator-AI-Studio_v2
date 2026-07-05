@@ -31,7 +31,7 @@ export const StoryJournal: React.FC<StoryJournalProps> = ({ entries, onClose, on
                 {/* Header */}
                 <div className="bg-gray-800 p-4 flex justify-between items-center border-b border-gray-700">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 bg-indigo-600 rounded-lg text-white">
+                        <div className="p-2 bg-emerald-600 rounded-lg text-white">
                             <Book size={20} />
                         </div>
                         <div>
@@ -52,21 +52,21 @@ export const StoryJournal: React.FC<StoryJournalProps> = ({ entries, onClose, on
                         </div>
                     ) : (
                         entries.map((entry, index) => (
-                            <div key={entry.id} className="relative pl-8 border-l-2 border-indigo-500/30 last:border-0 pb-8 last:pb-0">
+                            <div key={entry.id} className="relative pl-8 border-l-2 border-emerald-500/30 last:border-0 pb-8 last:pb-0">
                                 {/* Timeline Dot */}
-                                <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-gray-900 border-2 border-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]"></div>
+                                <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-gray-900 border-2 border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"></div>
                                 
                                 <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-4 hover:border-gray-600 transition-colors">
                                     <div className="flex justify-between items-start mb-2">
                                         <div>
-                                            <h3 className="font-bold text-lg text-indigo-300">{entry.sceneName}</h3>
+                                            <h3 className="font-bold text-lg text-emerald-300">{entry.sceneName}</h3>
                                             <div className="flex items-center gap-4 text-xs text-gray-400 mt-1">
                                                 <span className="flex items-center gap-1"><MapPin size={12}/> {entry.locationName}</span>
                                                 <span className="flex items-center gap-1"><Users size={12}/> {entry.charactersInvolved.join(', ')}</span>
                                             </div>
                                         </div>
                                         {editingId !== entry.id && (
-                                            <button onClick={() => startEditing(entry)} className="text-gray-500 hover:text-indigo-400 p-1" title="Edit Summary">
+                                            <button onClick={() => startEditing(entry)} className="text-gray-500 hover:text-emerald-400 p-1" title="Edit Summary">
                                                 <Edit2 size={14} />
                                             </button>
                                         )}
@@ -75,7 +75,7 @@ export const StoryJournal: React.FC<StoryJournalProps> = ({ entries, onClose, on
                                     {editingId === entry.id ? (
                                         <div className="mt-3">
                                             <textarea 
-                                                className="w-full bg-black/30 border border-gray-600 rounded-lg p-3 text-sm text-gray-200 focus:border-indigo-500 outline-none min-h-[100px]"
+                                                className="w-full bg-black/30 border border-gray-600 rounded-lg p-3 text-sm text-gray-200 focus:border-emerald-500 outline-none min-h-[100px]"
                                                 value={editText}
                                                 onChange={(e) => setEditText(e.target.value)}
                                             />

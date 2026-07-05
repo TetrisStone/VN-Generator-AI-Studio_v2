@@ -283,7 +283,7 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
           {/* Dev Tools Toggle */}
           <button 
              onClick={() => setShowDevTools(!showDevTools)}
-             className={`flex items-center gap-1 md:gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-md border transition-all shadow-lg flex-shrink-0 ${showDevTools ? 'bg-indigo-600/80 border-indigo-400 text-white' : 'bg-black/50 hover:bg-black/70 border-white/10 text-gray-300'}`}
+             className={`flex items-center gap-1 md:gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-md border transition-all shadow-lg flex-shrink-0 ${showDevTools ? 'bg-emerald-600/80 border-emerald-400 text-white' : 'bg-black/50 hover:bg-black/70 border-white/10 text-gray-300'}`}
           >
              <Cpu size={14} />
              <span className="font-semibold text-xs md:text-sm hidden sm:inline">Dev Tools</span>
@@ -291,13 +291,13 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
 
           {/* Dev Tools Panel */}
           {showDevTools && (
-             <div className="bg-black/80 backdrop-blur-md border border-indigo-500/30 p-3 rounded-xl min-w-[200px] text-xs font-mono text-gray-300 shadow-xl animate-in fade-in slide-in-from-left-4">
-                <div className="font-bold text-indigo-400 mb-2 border-b border-indigo-500/30 pb-1">Token Usage (Last Turn)</div>
+             <div className="bg-black/80 backdrop-blur-md border border-emerald-500/30 p-3 rounded-xl min-w-[200px] text-xs font-mono text-gray-300 shadow-xl animate-in fade-in slide-in-from-left-4">
+                <div className="font-bold text-emerald-400 mb-2 border-b border-emerald-500/30 pb-1">Token Usage (Last Turn)</div>
                 {lastTokenStats ? (
                   <div className="flex flex-col gap-1">
                      <div className="flex justify-between"><span>Prompt:</span> <span>{lastTokenStats.promptTokens || 0}</span></div>
                      <div className="flex justify-between"><span>Completion:</span> <span>{lastTokenStats.completionTokens || 0}</span></div>
-                     <div className="flex justify-between border-t border-gray-700/50 pt-1 mt-1 font-bold text-indigo-300"><span>Total:</span> <span>{lastTokenStats.totalTokens || 0}</span></div>
+                     <div className="flex justify-between border-t border-gray-700/50 pt-1 mt-1 font-bold text-emerald-300"><span>Total:</span> <span>{lastTokenStats.totalTokens || 0}</span></div>
                   </div>
                 ) : (
                   <div className="text-gray-500 italic">No data yet. Send a message!</div>
@@ -307,9 +307,9 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
         </div>
 
         {/* Location / Chapter Display & Goal */}
-        <div className="bg-black/60 backdrop-blur-md border border-white/10 px-3 py-1.5 md:px-4 md:py-2 rounded-xl md:rounded-full text-indigo-200 font-bold shadow-lg flex flex-col items-center max-w-[50%] md:max-w-md w-full">
+        <div className="bg-black/60 backdrop-blur-md border border-white/10 px-3 py-1.5 md:px-4 md:py-2 rounded-xl md:rounded-full text-emerald-200 font-bold shadow-lg flex flex-col items-center max-w-[50%] md:max-w-md w-full">
             <div className="flex items-center gap-1 md:gap-2 text-xs md:text-sm text-center">
-               <MapPin size={12} className="text-indigo-400 flex-shrink-0" />
+               <MapPin size={12} className="text-emerald-400 flex-shrink-0" />
                <span className="truncate">{currentScene.locationName || 'Unknown Location'}</span>
             </div>
             {currentChapter && <span className="text-[9px] md:text-[10px] text-gray-400 font-normal uppercase tracking-widest truncate max-w-full">{currentChapter.name}</span>}
@@ -428,7 +428,7 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
                    <div 
                       className={`px-3 py-1.5 md:px-4 md:py-2 rounded-lg max-w-[90%] md:max-w-[85%] text-xs md:text-sm leading-relaxed ${
                         isUser 
-                          ? 'bg-indigo-600 text-white rounded-br-none' 
+                          ? 'bg-emerald-600 text-white rounded-br-none' 
                           : 'bg-gray-800 text-white rounded-bl-none border border-gray-700'
                       }`}
                       style={!isUser ? bubbleStyle : undefined}
@@ -468,7 +468,7 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
              
              <input
                type="text"
-               className="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 md:px-4 md:py-3 text-xs md:text-sm text-white focus:border-indigo-500 outline-none transition-colors"
+               className="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 md:px-4 md:py-3 text-xs md:text-sm text-white focus:border-emerald-500 outline-none transition-colors"
                placeholder={goalReached ? "Keep chatting or leave..." : "What do you say/do?"}
                value={userInput}
                onChange={(e) => setUserInput(e.target.value)}
@@ -479,7 +479,7 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
              <button 
                 onClick={handleSendMessage}
                 disabled={!userInput.trim() || state.isProcessing}
-                className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:cursor-not-allowed text-white p-2 md:p-3 rounded-lg transition-colors"
+                className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-700 disabled:cursor-not-allowed text-white p-2 md:p-3 rounded-lg transition-colors"
              >
                <Send size={16} />
              </button>

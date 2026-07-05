@@ -240,7 +240,93 @@ export const generateAutoScene = async (
     }
 };
 
+
+const SEMANTIC_SYNONYMS: Record<string, string[]> = {
+  "garde": ["wache", "wächter", "soldat", "militär", "truppe", "ritter", "krieger", "garrison", "guard", "soldier", "guards", "watch", "watchman"],
+  "gilde": ["bündnis", "fraktion", "clique", "orden", "sekte", "bund", "guild", "faction", "alliance"],
+  "schenke": ["taverne", "kneipe", "gasthaus", "herberge", "inn", "tavern", "bar", "pub"],
+  "tempel": ["schrein", "kirche", "kathedrale", "altar", "heiligtum", "temple", "shrine", "church"],
+  "burg": ["schloss", "festung", "palast", "turm", "ruine", "castle", "fortress", "palace"],
+  "wald": ["forst", "gehölz", "dschungel", "hain", "forest", "woods", "grove"],
+  "markt": ["basar", "handelsplatz", "stand", "laden", "geschäft", "market", "bazaar", "shop"],
+  "hafen": ["dock", "kai", "werft", "marina", "port", "harbor", "docks"],
+  "akademie": ["schule", "universität", "bibliothek", "archiv", "academy", "school", "library"],
+  "könig": ["kaiser", "fürst", "herzog", "graf", "monarch", "herrscher", "thron", "royal", "king", "queen", "empire"],
+  "dieb": ["schurke", "bande", "mafia", "schmuggler", "räuber", "thief", "rogue", "bandit", "smuggler", "diebe"]
+};
+
+const STOP_WORDS = new Set([
+  "aber", "alle", "allem", "allen", "aller", "alles", "als", "also", "am", "an", "and", "auch", "auf", "aus", "bei", "bin", "bis", "bist", "da", "damit", "dann", "das", "dass", "dein", "deine", "dem", "den", "denn", "der", "des", "dessen", "dich", "die", "dies", "diese", "dieser", "dieses", "doch", "dort", "du", "durch", "ein", "eine", "einem", "einen", "einer", "eines", "einige", "einigen", "einiger", "einiges", "einmal", "er", "es", "euch", "euer", "eure", "für", "gegen", "gewesen", "habe", "haben", "hat", "hatte", "ihm", "ihn", "ihr", "ihre", "ihrem", "ihren", "ihrer", "ihres", "im", "in", "ist", "ja", "jede", "jedem", "jeden", "jeder", "jedes", "jene", "jenem", "jenen", "jener", "jenes", "jetzt", "kann", "können", "man", "mit", "nach", "nein", "nicht", "nur", "oder", "seid", "seine", "seinen", "seinem", "seiner", "seines", "selbst", "sich", "sie", "sind", "so", "solche", "solchem", "solchen", "solcher", "solches", "soll", "sollen", "und", "uns", "unser", "unsere", "unserem", "unseren", "unseres", "unter", "vom", "von", "vor", "was", "weg", "weil", "weiter", "welche", "welchem", "welchen", "welcher", "welches", "wenn", "wer", "werde", "werden", "wie", "wieder", "will", "wir", "wird", "wirst", "wo", "wollen", "wollten", "wurde", "wurden", "zu", "zum", "zur", "zusammen"
+]);
+
+function calculateLoreScore(
+  name: string,
+  description: string,
+  matchText: string,
+  matchWords: string[]
+): number {
+  let score = 0;
+  const nameLower = name.toLowerCase();
+  const descLower = description.toLowerCase();
+
+  // 1. Exakter Substring-Match des vollständigen Namens
+  if (matchText.includes(nameLower)) {
+    score += 25;
+  }
+
+  // Kernwörter des Eintrags extrahieren
+  const entryNameWords = nameLower
+    .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?\"]/g, " ")
+    .split(/\s+/)
+    .filter(w => w.length > 3 && !STOP_WORDS.has(w));
+
+  // 2. Wortweises Matching & Synonyme
+  for (const entryWord of entryNameWords) {
+    // Exakter Wortmatch (oder Teilwortmatch wie "wache" in "königliche wache")
+    if (matchWords.includes(entryWord) || matchWords.some(mw => mw.includes(entryWord))) {
+      score += 12;
+      continue;
+    }
+
+    // Semantischer Match über Synonyme
+    for (const [key, synonyms] of Object.entries(SEMANTIC_SYNONYMS)) {
+      const isKey = entryWord.includes(key) || key.includes(entryWord);
+      const inSynonyms = synonyms.some(s => entryWord.includes(s) || s.includes(entryWord));
+
+      if (isKey || inSynonyms) {
+        // Prüfen, ob eines der anderen Synonyme oder der Key im Text vorkommt
+        const matchFound = matchWords.some(w => 
+          w === key || 
+          w.includes(key) ||
+          synonyms.some(s => w === s || w.includes(s))
+        );
+        if (matchFound) {
+          score += 10;
+          break; // Ein Synonymmatch reicht für dieses Wort
+        }
+      }
+    }
+  }
+
+  // 3. Beschreibungswortweises Matching (mit geringerer Gewichtung)
+  const entryDescWords = descLower
+    .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?\"]/g, " ")
+    .split(/\s+/)
+    .filter(w => w.length > 4 && !STOP_WORDS.has(w));
+
+  let descMatches = 0;
+  for (const descWord of entryDescWords) {
+    if (matchWords.includes(descWord) || matchWords.some(mw => mw.includes(descWord))) {
+      descMatches++;
+    }
+  }
+  score += Math.min(descMatches, 5); // Bis zu 5 Punkte max für Beschreibung
+
+  return score;
+}
+
 export const generateGameTurn = async (
+
   currentInput: string,
   history: ChatMessage[],
   scene: Scene,
@@ -304,23 +390,99 @@ export const generateGameTurn = async (
   if (worldInfo) {
     worldContext += `WORLD VIEW / GLOBAL SETTING:\n${worldInfo.description}\n\n`;
     
-    // Faction-Scoping: Wenn die Szene relevante Fraktionen explizit auswählt, nur diese laden.
-    // Fallback: alle Fraktionen (für Backwards-Kompatibilität mit alten Szenen ohne Auswahl).
-    const factionsToLoad = scene.relevantFactionIds && scene.relevantFactionIds.length > 0
-      ? worldInfo.factions?.filter(f => scene.relevantFactionIds!.includes(f.id))
-      : worldInfo.factions;
+    // --- SMART LORE SCOPING & DYNAMIC EXTRACTION ENGINE ---
+    const recentHistoryText = history.slice(-5).map(msg => msg.text).join(' ');
+    const contextStringToSearch = `${currentInput} ${scene.name} ${scene.locationName || ''} ${scene.description} ${recentHistoryText}`;
+    const cleanedContextWords = contextStringToSearch
+      .toLowerCase()
+      .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?\"]/g, " ")
+      .split(/\s+/)
+      .filter(w => w.length > 3);
+
+    // 1. FACTION SCOPING & DYNAMIC SCANNING
+    const explicitlyScopedFactionIds = scene.relevantFactionIds || [];
+    const hasExplicitFactions = explicitlyScopedFactionIds.length > 0;
+
+    let factionsToLoad: any[] = [];
+    let dynamicFactions: any[] = [];
+
+    if (worldInfo.factions && worldInfo.factions.length > 0) {
+      if (hasExplicitFactions) {
+        // Explizit ausgewählte Fraktionen immer laden
+        factionsToLoad = worldInfo.factions.filter(f => explicitlyScopedFactionIds.includes(f.id));
+        // Restliche Fraktionen auf dynamische Relevanz prüfen
+        const remainingFactions = worldInfo.factions.filter(f => !explicitlyScopedFactionIds.includes(f.id));
+        for (const f of remainingFactions) {
+          const score = calculateLoreScore(f.name, f.description, contextStringToSearch.toLowerCase(), cleanedContextWords);
+          if (score >= 10) {
+            dynamicFactions.push(f);
+          }
+        }
+      } else {
+        // Keine explizite Auswahl getroffen -> Smart-Filter alle bzw. Fallback auf alle
+        const scoredFactions = worldInfo.factions.map(f => ({
+          faction: f,
+          score: calculateLoreScore(f.name, f.description, contextStringToSearch.toLowerCase(), cleanedContextWords)
+        }));
+        
+        const relevant = scoredFactions.filter(sf => sf.score >= 10).map(sf => sf.faction);
+        if (relevant.length > 0) {
+          factionsToLoad = relevant;
+        } else {
+          // Fallback: alle laden, wenn gar kein Match gefunden wurde
+          factionsToLoad = worldInfo.factions;
+        }
+      }
+    }
 
     if (factionsToLoad && factionsToLoad.length > 0) {
       worldContext += `RELEVANT FACTIONS FOR THIS SCENE:\n${factionsToLoad.map(f => `- ${f.name}: ${f.description}`).join('\n')}\n\n`;
     }
+    if (dynamicFactions.length > 0) {
+      worldContext += `DYNAMICALLY DETECTED FACTIONS (Contextually Mentioned / Relevant):\n${dynamicFactions.map(f => `- ${f.name} (Detected via Synonym/Keyword): ${f.description}`).join('\n')}\n\n`;
+    }
     
-    // Location-Scoping: gleiches Prinzip
-    const locationsToLoad = scene.relevantLocationIds && scene.relevantLocationIds.length > 0
-      ? worldInfo.loreLocations?.filter(l => scene.relevantLocationIds!.includes(l.id))
-      : worldInfo.loreLocations;
+    // 2. LOCATION SCOPING & DYNAMIC SCANNING
+    const explicitlyScopedLocationIds = scene.relevantLocationIds || [];
+    const hasExplicitLocations = explicitlyScopedLocationIds.length > 0;
+
+    let locationsToLoad: any[] = [];
+    let dynamicLocations: any[] = [];
+
+    if (worldInfo.loreLocations && worldInfo.loreLocations.length > 0) {
+      if (hasExplicitLocations) {
+        // Explizit ausgewählte Orte immer laden
+        locationsToLoad = worldInfo.loreLocations.filter(l => explicitlyScopedLocationIds.includes(l.id));
+        // Restliche Orte auf dynamische Relevanz prüfen
+        const remainingLocations = worldInfo.loreLocations.filter(l => !explicitlyScopedLocationIds.includes(l.id));
+        for (const l of remainingLocations) {
+          const score = calculateLoreScore(l.name, l.description, contextStringToSearch.toLowerCase(), cleanedContextWords);
+          if (score >= 10) {
+            dynamicLocations.push(l);
+          }
+        }
+      } else {
+        // Keine explizite Auswahl getroffen -> Smart-Filter alle bzw. Fallback auf alle
+        const scoredLocations = worldInfo.loreLocations.map(l => ({
+          location: l,
+          score: calculateLoreScore(l.name, l.description, contextStringToSearch.toLowerCase(), cleanedContextWords)
+        }));
+        
+        const relevant = scoredLocations.filter(sl => sl.score >= 10).map(sl => sl.location);
+        if (relevant.length > 0) {
+          locationsToLoad = relevant;
+        } else {
+          // Fallback: alle laden, wenn gar kein Match gefunden wurde
+          locationsToLoad = worldInfo.loreLocations;
+        }
+      }
+    }
 
     if (locationsToLoad && locationsToLoad.length > 0) {
       worldContext += `RELEVANT LOCATIONS FOR THIS SCENE:\n${locationsToLoad.map(l => `- ${l.name}: ${l.description}`).join('\n')}\n\n`;
+    }
+    if (dynamicLocations.length > 0) {
+      worldContext += `DYNAMICALLY DETECTED LOCATIONS (Contextually Mentioned / Relevant):\n${dynamicLocations.map(l => `- ${l.name} (Detected via Synonym/Keyword): ${l.description}`).join('\n')}\n\n`;
     }
 
     if (worldInfo.systemInstruction) {

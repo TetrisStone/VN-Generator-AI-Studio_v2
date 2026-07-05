@@ -852,14 +852,14 @@ const App: React.FC = () => {
   }, [currentBgmUrl]);
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 font-sans selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen bg-gray-900 text-gray-100 font-sans selection:bg-emerald-500 selection:text-white">
       {/* BACKGROUND AUDIO PLAYER */}
       <audio ref={audioRef} loop className="hidden" />
 
       {/* PROCESSING OVERLAY */}
       {isProcessing && (
           <div className="fixed inset-0 z-[200] bg-black/90 flex flex-col items-center justify-center pointer-events-none">
-              <Loader2 size={48} className="animate-spin text-indigo-500 mb-4" />
+              <Loader2 size={48} className="animate-spin text-emerald-500 mb-4" />
               <h2 className="text-xl font-bold text-white tracking-widest animate-pulse">PROCESSING DATA...</h2>
               <p className="text-sm text-gray-400 mt-2">Compressing or unpacking project files, please wait.</p>
           </div>
@@ -868,7 +868,7 @@ const App: React.FC = () => {
       {/* LOADING OVERLAY FOR SUMMARY GENERATION */}
       {generatingSummary && (
           <div className="fixed inset-0 z-[200] bg-black/90 flex flex-col items-center justify-center pointer-events-none">
-              <Loader2 size={48} className="animate-spin text-indigo-500 mb-4" />
+              <Loader2 size={48} className="animate-spin text-emerald-500 mb-4" />
               <h2 className="text-xl font-bold text-white tracking-widest animate-pulse">WRITING STORY LOG...</h2>
               <p className="text-sm text-gray-400 mt-2">The Chronicler is recording your deeds.</p>
           </div>
