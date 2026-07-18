@@ -1,11 +1,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Scene, Character, ChatMessage, GameState, GameSaveData, Chapter, WorldInfo, CharacterEmotion } from '../types';
-import { generateGameTurn } from '../services/geminiService';
+import { generateGameTurn, generateImagePromptContext } from '../services/geminiService';
 import { Button } from './ui/Button';
-import { ArrowLeft, RefreshCw, Send, Save, Map, CheckCircle, Play, MapPin, Heart, SkipForward, Target, Cpu } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Send, Save, Map, CheckCircle, Play, MapPin, Heart, SkipForward, Target, Cpu, Sparkles, XCircle, Loader2, User, Image as ImageIcon } from 'lucide-react';
 import { AsyncImage } from './ui/AsyncImage';
 import { AsyncVideo } from './ui/AsyncVideo';
+import { generateComfyImage, prepareComfyWorkflow } from '../services/comfyService';
+import { saveImage } from '../utils/imageStorage';
 
 interface PlayerProps {
   scenes: Scene[];
@@ -16,9 +18,10 @@ interface PlayerProps {
   onExit: (success: boolean, history: ChatMessage[]) => void; 
   onSave: (vnState: any) => Promise<boolean>;
   onCharacterUpdate?: (updatedChar: Character) => void; // New prop to persist changes
+  onSceneUpdate?: (updatedScene: Scene) => void; // New prop to persist scene edits
 }
 
-export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, worldInfo, initialState, onExit, onSave, onCharacterUpdate }) => {
+export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, worldInfo, initialState, onExit, onSave, onCharacterUpdate, onSceneUpdate }) => {
   const [state, setState] = useState<GameState>({
     currentSceneIndex: initialState?.currentSceneIndex || 0,
     history: initialState?.history || [],
@@ -46,6 +49,15 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
 
   const currentScene = scenes[state.currentSceneIndex];
   
+  // ComfyUI States
+  const [showComfyModal, setShowComfyModal] = useState(false);
+  const [activeEventCG, setActiveEventCG] = useState<string | null>(null);
+  const [comfyPrompt, setComfyPrompt] = useState('');
+  const [comfyStatus, setComfyStatus] = useState('');
+  const [isComfyGenerating, setIsComfyGenerating] = useState(false);
+  const [isComfyContextLoading, setIsComfyContextLoading] = useState(false);
+  const [comfyError, setComfyError] = useState<string | null>(null);
+
   // Find current chapter
   const currentChapter = currentScene?.chapterId ? chapters.find(c => c.id === currentScene.chapterId) : undefined;
   
@@ -53,6 +65,34 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
   const activeCharacters = currentScene?.characters
     .map(sc => characters.find(c => c.id === sc.characterId))
     .filter((c): c is Character => !!c) || [];
+
+  const handleOpenComfyModal = async () => {
+    setShowComfyModal(true);
+    setComfyError(null);
+    setComfyStatus('');
+    setIsComfyContextLoading(true);
+
+    if (currentScene) {
+      // Load context from AI
+      const aiContext = await generateImagePromptContext(state.history, currentScene, activeCharacters, worldInfo);
+      
+      // Collect ONLY aiImagePrompts (Lora tags) from active characters
+      const charPrompts = activeCharacters
+        .map(c => c.aiImagePrompt?.trim() || '')
+        .filter(p => p.length > 0)
+        .join(", ");
+
+      const finalPromptParts = [
+         charPrompts,
+         aiContext,
+         "16:9 wallpaper"
+      ].filter(part => part && part.trim().length > 0);
+
+      setComfyPrompt(finalPromptParts.join(", "));
+    }
+
+    setIsComfyContextLoading(false);
+  };
 
   // Logic: Visible characters are strictly those with an imageSrc or any emotion image.
   const visibleCharacters = activeCharacters.filter(c => !!c.imageSrc || (c.emotions && Object.values(c.emotions).some(v => !!v)));
@@ -193,6 +233,39 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
       onExit(complete, state.history);
   };
 
+  const handleComfyGenerate = async () => {
+    setIsComfyGenerating(true);
+    setComfyError(null);
+    setComfyStatus('Konstruiere Workflow...');
+
+    try {
+        const comfyUrl = worldInfo?.comfyUrl || 'http://127.0.0.1:8188';
+        const workflowStr = worldInfo?.comfyWorkflow || '';
+
+        const width = 1024;
+        const height = 576;
+
+        const preparedWorkflow = prepareComfyWorkflow(workflowStr, comfyPrompt, width, height);
+        
+        const base64Data = await generateComfyImage(comfyUrl, preparedWorkflow, (statusMsg) => {
+            setComfyStatus(statusMsg);
+        });
+
+        const newId = crypto.randomUUID();
+        await saveImage(newId, base64Data);
+
+        setActiveEventCG(newId);
+        addNotification('Event CG generiert!', 'good');
+
+        setShowComfyModal(false);
+    } catch (err: any) {
+        console.error(err);
+        setComfyError(err.message || 'Ein unbekannter Fehler ist aufgetreten.');
+    } finally {
+        setIsComfyGenerating(false);
+    }
+  };
+
   const handleSaveGame = async () => {
     if (isSaving) return;
     setIsSaving(true);
@@ -304,6 +377,17 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
                 )}
              </div>
           )}
+
+          {/* ComfyUI Image Generator Toggle */}
+          {worldInfo?.comfyEnabled && (
+             <button 
+                onClick={handleOpenComfyModal}
+                className="flex items-center gap-1 md:gap-2 bg-purple-900/60 border border-purple-500/50 hover:bg-purple-850 text-purple-100 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-md transition-all hover:scale-105 shadow-lg flex-shrink-0"
+             >
+                <Sparkles size={14} className="animate-pulse text-purple-400" />
+                <span className="font-semibold text-xs md:text-sm">KI Generieren</span>
+             </button>
+          )}
         </div>
 
         {/* Location / Chapter Display & Goal */}
@@ -392,6 +476,23 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
            );
         })}
       </div>
+
+      {/* Event CG Layer */}
+      {activeEventCG && (
+        <div 
+           className="absolute inset-0 z-20 bg-black cursor-pointer animate-in fade-in duration-500"
+           onClick={() => setActiveEventCG(null)}
+        >
+           <AsyncImage 
+              src={activeEventCG} 
+              alt="Event CG" 
+              className="w-full h-full object-cover"
+           />
+           <div className="absolute top-4 right-4 bg-black/60 text-white text-xs px-2 py-1 rounded backdrop-blur">
+               Klicken, um zurückzukehren
+           </div>
+        </div>
+      )}
 
       {/* UI Layer - Chat Box */}
       <div className="absolute bottom-0 left-0 right-0 z-30 p-2 md:p-8 bg-gradient-to-t from-black via-black/90 to-transparent pt-16 md:pt-24">
@@ -487,6 +588,72 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
 
         </div>
       </div>
+
+      {/* COMFYUI GENERATION MODAL - Located at top-level to prevent chat box container height clipping */}
+      {showComfyModal && (
+          <div className="fixed inset-0 z-[300] bg-black/85 flex items-center justify-center p-4 backdrop-blur-md pointer-events-auto overflow-y-auto">
+              <div className="bg-gray-900 border border-purple-500/30 rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col gap-4 text-gray-200 shadow-2xl">
+                  <div className="flex justify-between items-center border-b border-gray-800 pb-3">
+                      <h3 className="font-bold text-lg text-purple-400 flex items-center gap-2">
+                          <Sparkles size={20} className="animate-pulse" /> KI-Bildgenerierung (ComfyUI)
+                      </h3>
+                      <button 
+                          onClick={() => setShowComfyModal(false)} 
+                          className="text-gray-400 hover:text-white transition"
+                          disabled={isComfyGenerating}
+                      >
+                          <XCircle size={24} />
+                      </button>
+                  </div>
+
+                  <div className="space-y-4">
+                      {/* Prompt Editor */}
+                      {isComfyContextLoading ? (
+                         <div className="flex flex-col items-center justify-center p-6 gap-3">
+                            <Loader2 size={24} className="animate-spin text-purple-400" />
+                            <div className="text-sm text-purple-300">Kontext wird von der KI analysiert...</div>
+                         </div>
+                      ) : (
+                         <div>
+                             <label className="text-xs text-gray-400 font-bold mb-1 block uppercase">Bildbeschreibung (Prompt)</label>
+                             <textarea 
+                                 className="w-full h-32 bg-gray-800 border border-gray-700 rounded p-3 text-white focus:border-purple-500 outline-none resize-none text-sm leading-relaxed font-sans"
+                                 value={comfyPrompt}
+                                 onChange={(e) => setComfyPrompt(e.target.value)}
+                                 placeholder="Beschreibe das Event CG..."
+                                 disabled={isComfyGenerating}
+                             />
+                             <p className="text-[10px] text-gray-500 mt-1">
+                                 Die Beschreibung wurde automatisch aus den Charakter-Settings, der Szenenbeschreibung und der Chat-Historie zusammengebaut. Du kannst sie jetzt noch anpassen.
+                             </p>
+                         </div>
+                      )}
+
+                      {/* Generate / Error Display */}
+                      {comfyError && (
+                          <div className="p-3 bg-red-950/40 border border-red-500/50 rounded text-red-300 text-xs whitespace-pre-wrap leading-relaxed">
+                              {comfyError}
+                          </div>
+                      )}
+
+                      {isComfyGenerating ? (
+                          <div className="p-4 bg-purple-950/20 border border-purple-500/30 rounded flex flex-col items-center justify-center gap-3">
+                              <Loader2 size={32} className="animate-spin text-purple-500" />
+                              <div className="text-sm font-semibold text-purple-300">{comfyStatus}</div>
+                              <p className="text-[11px] text-gray-500 text-center">Dieser Vorgang kann je nach Systemleistung ein paar Sekunden dauern.</p>
+                          </div>
+                      ) : (
+                          <button 
+                              onClick={handleComfyGenerate}
+                              className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-lg hover:shadow-purple-950/50"
+                          >
+                              <Sparkles size={18} /> Jetzt Generieren (ComfyUI)
+                          </button>
+                      )}
+                  </div>
+              </div>
+          </div>
+      )}
     </div>
   );
 };

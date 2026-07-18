@@ -325,8 +325,72 @@ function calculateLoreScore(
   return score;
 }
 
-export const generateGameTurn = async (
+export const generateImagePromptContext = async (
+  history: ChatMessage[],
+  scene: Scene,
+  activeCharacters: Character[],
+  worldInfo?: WorldInfo,
+): Promise<string> => {
+  const recentHistory = history.slice(-5).map(msg => `${msg.sender}: ${msg.text}`).join('\n');
+  const charDetails = activeCharacters.map(c => c.name).join(', ');
 
+  const prompt = `
+Du bist ein Experte für Prompts für ComfyUI / Stable Diffusion.
+Der Benutzer möchte ein "Event CG" (ein vollflächiges Bild der aktuellen Szene) für eine Visual Novel generieren.
+
+AKTUELLE SZENE:
+Name: ${scene.name}
+Beschreibung: ${scene.description || ''}
+Sensorische Details: ${scene.sensoryDetails || ''}
+
+ANWESENDE CHARAKTERE:
+${charDetails}
+
+KÜRZLICHER CHATVERLAUF:
+${recentHistory}
+
+AUFGABE:
+Basierend NUR auf dem Chatverlauf und der Szenenbeschreibung, schreibe EINEN KURZEN SATZ auf Englisch, der visuell beschreibt, was gerade passiert. 
+Fokussiere dich auf Handlungen, Gefühle, Gesten und Blickrichtungen der Charaktere.
+Beispiel: "Elara is sitting on the bed looking surprised, while Peripé is standing by the window pointing outside."
+Gib NUR den zusammenfassenden String zurück, ohne weitere Erklärungen oder Formatierungen.
+`;
+
+  try {
+    const isOllama = worldInfo?.llmProvider === 'ollama';
+    if (isOllama) {
+        const url = (worldInfo?.ollamaUrl || 'http://localhost:11434').replace(/\/$/, '');
+        const model = worldInfo?.llmModel || 'llama3';
+        
+        const res = await fetch(`${url}/api/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: model,
+                prompt: prompt,
+                stream: false,
+            })
+        });
+        if (!res.ok) throw new Error("Ollama Error");
+        const data = await res.json();
+        return data.response.trim();
+    } else {
+        const response = await fetch("/api/gemini/generateText", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt, defaultGeminiModel: "gemini-3.5-flash", worldInfo })
+        });
+        if (!response.ok) throw new Error("Gemini API Error");
+        const data = await response.json();
+        return data.text.trim();
+    }
+  } catch (err) {
+    console.error("Error generating image prompt context:", err);
+    return "";
+  }
+};
+
+export const generateGameTurn = async (
   currentInput: string,
   history: ChatMessage[],
   scene: Scene,

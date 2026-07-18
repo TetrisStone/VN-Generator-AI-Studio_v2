@@ -57,6 +57,7 @@ export interface Character {
   name: string;
   defaultDescription: string;
   lore?: string;
+  aiImagePrompt?: string; // New field for ComfyUI generation
   
   // Visuals
   rpgColor: string;
@@ -191,6 +192,9 @@ export interface WorldInfo {
   llmProvider?: 'gemini' | 'ollama';
   llmModel?: string;
   ollamaUrl?: string;
+  comfyUrl?: string;
+  comfyEnabled?: boolean;
+  comfyWorkflow?: string;
 }
 
 export interface Chapter {

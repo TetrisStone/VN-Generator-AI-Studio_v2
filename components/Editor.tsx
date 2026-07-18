@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Character, Scene, WorldMap, Battle, WorldInfo, Chapter, SceneEffect, MapSpot, WorldLocation, Faction, RelationshipTrigger, RelationshipThreshold, StoryLogEntry } from '../types';
 import { Button } from './ui/Button';
 import { Trash, Sword, Scaling, Plus, Save, Play, Download, Upload, Monitor, Map as MapIcon, Users, Target, Book, Layout, MessageSquare, Unlock, Lock, Waypoints, Image as ImageIcon, XCircle, Terminal, MapPin, Heart, EyeOff, Video, Music, Sparkles, Loader2, ArrowLeft, Cpu } from 'lucide-react';
@@ -7,18 +7,31 @@ import { AsyncImage } from './ui/AsyncImage';
 import { AsyncVideo } from './ui/AsyncVideo';
 
 import { saveImage, loadImage, deleteImage } from '../utils/imageStorage';
+import { generateComfyImage, prepareComfyWorkflow, getDefaultWorkflow } from '../services/comfyService';
+
+export const WorldInfoContext = React.createContext<WorldInfo | null>(null);
 
 interface ImageFieldProps {
   label: string;
   value: string | null;
   onChange: (val: string | null) => void;
+  defaultPrompt?: string;
 }
 
-const ImageField: React.FC<ImageFieldProps> = ({ label, value, onChange }) => {
+const ImageField: React.FC<ImageFieldProps> = ({ label, value, onChange, defaultPrompt = '' }) => {
     const inputRef = useRef<HTMLInputElement>(null);
     const [imgSrc, setImgSrc] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
+
+    // AI Generation Modal States
+    const [showAiModal, setShowAiModal] = useState(false);
+    const [aiPrompt, setAiPrompt] = useState('');
+    const [aiStatus, setAiStatus] = useState('');
+    const [isAiGenerating, setIsAiGenerating] = useState(false);
+    const [aiError, setAiError] = useState<string | null>(null);
+
+    const worldInfo = React.useContext(WorldInfoContext);
 
     React.useEffect(() => {
         let isMounted = true;
@@ -88,12 +101,48 @@ const ImageField: React.FC<ImageFieldProps> = ({ label, value, onChange }) => {
     };
 
     const handleRemove = async () => {
-        if (value) {
-            // Optional: delete from storage here, or leave it orphaned and garbage collect later.
-            // await deleteImage(value);
-        }
         onChange(null);
         setImgSrc(null);
+    };
+
+    const handleOpenAiModal = (e: React.MouseEvent) => {
+        e.stopPropagation(); // Avoid triggering file inputs
+        setAiPrompt(defaultPrompt);
+        setAiStatus('');
+        setAiError(null);
+        setShowAiModal(true);
+    };
+
+    const handleAiGenerate = async () => {
+        setIsAiGenerating(true);
+        setAiError(null);
+        setAiStatus('Konstruiere Workflow...');
+
+        try {
+            const comfyUrl = worldInfo?.comfyUrl || 'http://127.0.0.1:8188';
+            const workflowStr = worldInfo?.comfyWorkflow || '';
+
+            const isBackground = label.toLowerCase().includes('background') || label.toLowerCase().includes('hintergrund') || label.toLowerCase().includes('bg');
+            const width = isBackground ? 1024 : 512;
+            const height = isBackground ? 576 : 512;
+
+            const preparedWorkflow = prepareComfyWorkflow(workflowStr, aiPrompt, width, height);
+            
+            const base64Data = await generateComfyImage(comfyUrl, preparedWorkflow, (statusMsg) => {
+                setAiStatus(statusMsg);
+            });
+
+            const newId = crypto.randomUUID();
+            await saveImage(newId, base64Data);
+            setImgSrc(base64Data);
+            onChange(newId);
+            setShowAiModal(false);
+        } catch (err: any) {
+            console.error(err);
+            setAiError(err.message || 'Ein unbekannter Fehler ist aufgetreten.');
+        } finally {
+            setIsAiGenerating(false);
+        }
     };
 
     return (
@@ -118,10 +167,13 @@ const ImageField: React.FC<ImageFieldProps> = ({ label, value, onChange }) => {
                 >
                     <img src={imgSrc} className="w-full h-full object-contain" alt={label} />
                     <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                         <button onClick={() => inputRef.current?.click()} className="p-2 bg-emerald-600 rounded text-white hover:bg-emerald-500 transition-colors shadow-lg" title="Change Image">
+                         <button onClick={() => inputRef.current?.click()} className="p-2 bg-emerald-600 rounded text-white hover:bg-emerald-500 transition-colors shadow-lg" title="Bilde hochladen">
                             <Upload size={16}/>
                          </button>
-                         <button onClick={handleRemove} className="p-2 bg-red-600 rounded text-white hover:bg-red-500 transition-colors shadow-lg" title="Remove Image">
+                         <button onClick={handleOpenAiModal} className="p-2 bg-purple-600 rounded text-white hover:bg-purple-500 transition-colors shadow-lg" title="KI Generieren">
+                            <Sparkles size={16}/>
+                         </button>
+                         <button onClick={handleRemove} className="p-2 bg-red-600 rounded text-white hover:bg-red-500 transition-colors shadow-lg" title="Entfernen">
                             <Trash size={16}/>
                          </button>
                     </div>
@@ -132,26 +184,137 @@ const ImageField: React.FC<ImageFieldProps> = ({ label, value, onChange }) => {
                     )}
                 </div>
             ) : (
-                <button 
-                    onClick={() => inputRef.current?.click()}
+                <div 
                     onDrop={handleDrop}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
-                    className={`w-full h-24 flex flex-col items-center justify-center transition-all gap-2 group rounded border border-dashed ${
+                    className={`w-full h-24 flex items-center justify-center transition-all gap-3 group rounded border border-dashed p-1 ${
                         isDragging 
                             ? 'bg-emerald-900/50 border-emerald-400 text-emerald-300' 
-                            : 'bg-gray-800/50 hover:bg-gray-800 border-gray-600 hover:border-gray-500 text-gray-500'
+                            : 'bg-gray-800/50 border-gray-600 text-gray-500'
                     }`}
                 >
                     {isLoading ? (
                         <Loader2 size={24} className="animate-spin text-gray-400" />
                     ) : (
                         <>
-                            <ImageIcon size={20} className="group-hover:text-gray-300 transition-colors"/>
-                            <span className="text-[10px] uppercase font-bold group-hover:text-gray-300 transition-colors">Select or Drop</span>
+                            <button 
+                                onClick={() => inputRef.current?.click()}
+                                className="flex-1 h-full flex flex-col items-center justify-center hover:bg-gray-800 rounded transition gap-1"
+                                type="button"
+                            >
+                                <ImageIcon size={20} className="group-hover:text-gray-300 transition-colors"/>
+                                <span className="text-[9px] uppercase font-bold group-hover:text-gray-300 transition-colors text-center leading-none mt-1">Select / Drop</span>
+                            </button>
+                            <div className="w-[1px] h-10 bg-gray-700/60" />
+                            <button 
+                                onClick={handleOpenAiModal}
+                                className="flex-1 h-full flex flex-col items-center justify-center hover:bg-purple-950/20 text-purple-400 hover:text-purple-300 rounded transition gap-1"
+                                type="button"
+                            >
+                                <Sparkles size={20} className="animate-pulse text-purple-500"/>
+                                <span className="text-[9px] uppercase font-bold text-center leading-none mt-1">KI Generieren</span>
+                            </button>
                         </>
                     )}
-                </button>
+                </div>
+            )}
+
+            {/* KI Generierungs-Modal */}
+            {showAiModal && (
+                <div className="fixed inset-0 z-[500] bg-black/80 flex items-center justify-center p-4">
+                    <div className="bg-gray-900 border border-gray-700 shadow-2xl rounded-xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-950">
+                            <div className="flex items-center gap-2 text-emerald-400 font-bold">
+                                <Sparkles size={18} />
+                                <span>KI-Bildgenerierung (ComfyUI)</span>
+                            </div>
+                            <button 
+                                onClick={() => !isAiGenerating && setShowAiModal(false)} 
+                                className="text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+                                disabled={isAiGenerating}
+                            >
+                                <XCircle size={20} />
+                            </button>
+                        </div>
+                        
+                        <div className="p-4 space-y-4 overflow-y-auto flex-1 text-sm text-gray-300">
+                            {!worldInfo?.comfyEnabled && (
+                                <div className="p-3 bg-amber-950/30 border border-amber-900/50 rounded-lg text-amber-300 text-xs leading-relaxed">
+                                    <strong>Achtung:</strong> Die ComfyUI-Integration ist in den Einstellungen noch nicht aktiviert. Du kannst sie trotzdem hier testen, stelle aber sicher, dass dein lokaler Server läuft.
+                                </div>
+                            )}
+
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase block mb-1">
+                                    Prompts / Beschreibung (Englisch empfohlen)
+                                </label>
+                                <textarea 
+                                    className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:border-emerald-500 outline-none h-24 text-sm resize-none"
+                                    placeholder="e.g. Beautiful visual novel scenery of a high-tech workshop, neon accents, highly detailed anime style..."
+                                    value={aiPrompt}
+                                    onChange={e => setAiPrompt(e.target.value)}
+                                    disabled={isAiGenerating}
+                                />
+                            </div>
+
+                            <div className="bg-gray-950 p-3 rounded-lg border border-gray-800 space-y-1.5 text-xs text-gray-400">
+                                <div className="flex justify-between">
+                                    <span>Server-URL:</span>
+                                    <span className="font-mono text-emerald-400">{worldInfo?.comfyUrl || 'http://127.0.0.1:8188'}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span>Zielauflösung:</span>
+                                    <span>
+                                        {label.toLowerCase().includes('background') || label.toLowerCase().includes('hintergrund') || label.toLowerCase().includes('bg') ? '1024x576 (16:9)' : '512x512 (1:1)'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {isAiGenerating && (
+                                <div className="flex flex-col items-center justify-center p-4 bg-emerald-950/20 border border-emerald-900/30 rounded-lg space-y-3">
+                                    <Loader2 className="animate-spin text-emerald-500" size={32} />
+                                    <p className="text-emerald-300 font-medium animate-pulse text-xs text-center">{aiStatus}</p>
+                                </div>
+                            )}
+
+                            {aiError && (
+                                <div className="p-3 bg-red-950/40 border border-red-900/50 rounded-lg text-red-200 text-xs leading-relaxed">
+                                    <strong>Fehler beim Generieren:</strong>
+                                    <div className="mt-1 font-mono text-[10px] bg-black/40 p-2 rounded max-h-32 overflow-y-auto whitespace-pre-wrap">{aiError}</div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="p-4 border-t border-gray-800 bg-gray-950 flex justify-end gap-3">
+                            <Button 
+                                variant="secondary" 
+                                onClick={() => setShowAiModal(false)}
+                                disabled={isAiGenerating}
+                                className="px-4 text-xs"
+                            >
+                                Abbrechen
+                            </Button>
+                            <Button 
+                                onClick={handleAiGenerate}
+                                disabled={isAiGenerating || !aiPrompt.trim()}
+                                className="px-4 text-xs flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white"
+                            >
+                                {isAiGenerating ? (
+                                    <>
+                                        <Loader2 className="animate-spin" size={14} />
+                                        <span>Generiere...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Sparkles size={14} />
+                                        <span>Jetzt Generieren</span>
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );
@@ -367,6 +530,16 @@ const CharacterEditor: React.FC<CharacterEditorProps> = ({ character, onChange, 
             </div>
 
             <div>
+                <label className="text-xs font-bold text-gray-500 uppercase">KI-Bild-Prompt (ComfyUI / Lora)</label>
+                <textarea 
+                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 h-16 text-sm text-gray-300" 
+                    placeholder="Trigger words oder visuelle Eigenschaften (z.B. 1girl, elara_lora, red hair, fantasy dress...)"
+                    value={character.aiImagePrompt || ''} 
+                    onChange={e => onChange({ aiImagePrompt: e.target.value })} 
+                />
+            </div>
+
+            <div>
                 <label className="text-xs font-bold text-gray-500 uppercase">Lore / Backstory</label>
                 <textarea 
                     className="w-full bg-gray-800 border border-gray-700 rounded p-2 h-20 text-sm text-gray-300" 
@@ -377,21 +550,71 @@ const CharacterEditor: React.FC<CharacterEditorProps> = ({ character, onChange, 
             </div>
             
             <div className="grid grid-cols-2 gap-4">
-                <ImageField label="Portrait (Idle/Standard)" value={character.imageSrc} onChange={val => onChange({ imageSrc: val })} />
-                <ImageField label="Map Sprite (Small)" value={character.mapSpriteSrc} onChange={val => onChange({ mapSpriteSrc: val })} />
+                <ImageField 
+                    label="Portrait (Idle/Standard)" 
+                    value={character.imageSrc} 
+                    onChange={val => onChange({ imageSrc: val })} 
+                    defaultPrompt={`${character.name}, standard portrait, ${character.defaultDescription || ''}, anime visual novel style, high quality, standalone character sprite, white background`}
+                />
+                <ImageField 
+                    label="Map Sprite (Small)" 
+                    value={character.mapSpriteSrc} 
+                    onChange={val => onChange({ mapSpriteSrc: val })} 
+                    defaultPrompt={`${character.name}, mini chibi sprite, ${character.defaultDescription || ''}, transparent background, 2d game sprite, high quality`}
+                />
             </div>
 
             <div className="bg-gray-800 p-4 rounded border border-gray-700">
                 <h4 className="font-bold text-gray-400 mb-4 text-xs uppercase">Additional Emotions (Visual Novel)</h4>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <ImageField label="Happy" value={character.emotions?.happy || null} onChange={val => onChange({ emotions: { ...character.emotions, happy: val } })} />
-                    <ImageField label="Angry" value={character.emotions?.angry || null} onChange={val => onChange({ emotions: { ...character.emotions, angry: val } })} />
-                    <ImageField label="Thoughtful" value={character.emotions?.thoughtful || null} onChange={val => onChange({ emotions: { ...character.emotions, thoughtful: val } })} />
-                    <ImageField label="Shy" value={character.emotions?.shy || null} onChange={val => onChange({ emotions: { ...character.emotions, shy: val } })} />
-                    <ImageField label="Sad" value={character.emotions?.sad || null} onChange={val => onChange({ emotions: { ...character.emotions, sad: val } })} />
-                    <ImageField label="Shocked" value={character.emotions?.shocked || null} onChange={val => onChange({ emotions: { ...character.emotions, shocked: val } })} />
-                    <ImageField label="Worried" value={character.emotions?.worried || null} onChange={val => onChange({ emotions: { ...character.emotions, worried: val } })} />
-                    <ImageField label="Lustful" value={character.emotions?.lustful || null} onChange={val => onChange({ emotions: { ...character.emotions, lustful: val } })} />
+                    <ImageField 
+                        label="Happy" 
+                        value={character.emotions?.happy || null} 
+                        onChange={val => onChange({ emotions: { ...character.emotions, happy: val } })} 
+                        defaultPrompt={`${character.name}, happy expression, smile, ${character.defaultDescription || ''}, anime visual novel style, high quality, white background`}
+                    />
+                    <ImageField 
+                        label="Angry" 
+                        value={character.emotions?.angry || null} 
+                        onChange={val => onChange({ emotions: { ...character.emotions, angry: val } })} 
+                        defaultPrompt={`${character.name}, angry expression, scowling, ${character.defaultDescription || ''}, anime visual novel style, high quality, white background`}
+                    />
+                    <ImageField 
+                        label="Thoughtful" 
+                        value={character.emotions?.thoughtful || null} 
+                        onChange={val => onChange({ emotions: { ...character.emotions, thoughtful: val } })} 
+                        defaultPrompt={`${character.name}, thoughtful expression, hand on chin, ${character.defaultDescription || ''}, anime visual novel style, high quality, white background`}
+                    />
+                    <ImageField 
+                        label="Shy" 
+                        value={character.emotions?.shy || null} 
+                        onChange={val => onChange({ emotions: { ...character.emotions, shy: val } })} 
+                        defaultPrompt={`${character.name}, shy expression, blushing, slight smile, ${character.defaultDescription || ''}, anime visual novel style, high quality, white background`}
+                    />
+                    <ImageField 
+                        label="Sad" 
+                        value={character.emotions?.sad || null} 
+                        onChange={val => onChange({ emotions: { ...character.emotions, sad: val } })} 
+                        defaultPrompt={`${character.name}, sad expression, tearing up, looking down, ${character.defaultDescription || ''}, anime visual novel style, high quality, white background`}
+                    />
+                    <ImageField 
+                        label="Shocked" 
+                        value={character.emotions?.shocked || null} 
+                        onChange={val => onChange({ emotions: { ...character.emotions, shocked: val } })} 
+                        defaultPrompt={`${character.name}, shocked expression, wide eyes, open mouth, ${character.defaultDescription || ''}, anime visual novel style, high quality, white background`}
+                    />
+                    <ImageField 
+                        label="Worried" 
+                        value={character.emotions?.worried || null} 
+                        onChange={val => onChange({ emotions: { ...character.emotions, worried: val } })} 
+                        defaultPrompt={`${character.name}, worried expression, sweat drop, anxious, ${character.defaultDescription || ''}, anime visual novel style, high quality, white background`}
+                    />
+                    <ImageField 
+                        label="Lustful" 
+                        value={character.emotions?.lustful || null} 
+                        onChange={val => onChange({ emotions: { ...character.emotions, lustful: val } })} 
+                        defaultPrompt={`${character.name}, starry romantic eyes, slight blush, happy smile, ${character.defaultDescription || ''}, anime visual novel style, high quality, white background`}
+                    />
                 </div>
             </div>
 
@@ -709,7 +932,12 @@ const SceneEditor: React.FC<SceneEditorProps> = ({ scene, allScenes, allBattles,
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-                <ImageField label="Background Image" value={scene.backgroundSrc} onChange={val => onChange({ backgroundSrc: val })} />
+                <ImageField 
+                    label="Background Image" 
+                    value={scene.backgroundSrc} 
+                    onChange={val => onChange({ backgroundSrc: val })} 
+                    defaultPrompt={`${scene.name}, ${scene.description || ''}, ${scene.sensoryDetails || ''}, anime visual novel scenery background illustration, beautiful digital painting, colorful, high resolution`}
+                />
                 <VideoField label="Intro Video (Optional)" value={scene.introVideoSrc || null} onChange={val => onChange({ introVideoSrc: val })} />
             </div>
 
@@ -1004,7 +1232,12 @@ const MapEditor: React.FC<MapEditorProps> = ({ map, scenes, characters, battles,
                 <input className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white" value={map.name} onChange={e => onChange({ name: e.target.value })} />
             </div>
 
-            <ImageField label="Map Image" value={map.backgroundSrc} onChange={val => onChange({ backgroundSrc: val })} />
+            <ImageField 
+                label="Map Image" 
+                value={map.backgroundSrc} 
+                onChange={val => onChange({ backgroundSrc: val })} 
+                defaultPrompt={`${map.name}, gorgeous fantasy top-down map, regional layout map design, rpg game map, hand-drawn digital painting, clean vector shapes, highly detailed`}
+            />
 
             <AudioField label="Background Music (Loop)" value={map.bgmUrl || null} onChange={val => onChange({ bgmUrl: val || undefined })} />
 
@@ -1143,7 +1376,12 @@ const BattleEditor: React.FC<BattleEditorProps> = ({ battle, characters, chapter
                  </div>
             </div>
 
-            <ImageField label="Battle Background" value={battle.backgroundSrc} onChange={val => onChange({ backgroundSrc: val })} />
+            <ImageField 
+                label="Battle Background" 
+                value={battle.backgroundSrc} 
+                onChange={val => onChange({ backgroundSrc: val })} 
+                defaultPrompt={`${battle.name} battle background backdrop, epic anime combat arena, visual novel action backdrop, digital painting, dramatic cinematic lighting, masterpiece`}
+            />
 
             <AudioField label="Background Music (Loop)" value={battle.bgmUrl || null} onChange={val => onChange({ bgmUrl: val || undefined })} />
 
@@ -1306,7 +1544,8 @@ export const Editor: React.FC<EditorProps> = (props) => {
     };
 
     return (
-        <div className="flex h-screen overflow-hidden text-sm">
+        <WorldInfoContext.Provider value={props.worldInfo}>
+            <div className="flex h-screen overflow-hidden text-sm">
             {/* Mobile Sidebar Toggle Button */}
             <button
                 className="md:hidden absolute top-4 right-4 z-50 p-2 bg-gray-800 rounded-md text-white border border-gray-700"
@@ -1435,6 +1674,71 @@ export const Editor: React.FC<EditorProps> = (props) => {
                                             />
                                         </div>
                                     )}
+
+                                    {/* ComfyUI Settings */}
+                                    <div className="sm:col-span-2 border-t border-gray-800 pt-6 mt-4">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <div>
+                                                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                                                    <Sparkles size={16} className="text-emerald-500" /> Local ComfyUI Image Generation
+                                                </h4>
+                                                <p className="text-[11px] text-gray-500">Enable local AI image generation using a running ComfyUI server.</p>
+                                            </div>
+                                            <label className="flex items-center gap-2 text-xs bg-gray-800 px-3 py-1.5 rounded-lg border border-gray-700 cursor-pointer select-none">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={props.worldInfo.comfyEnabled || false} 
+                                                    onChange={e => props.onUpdateWorldInfo({ ...props.worldInfo, comfyEnabled: e.target.checked })} 
+                                                    className="rounded text-emerald-600 focus:ring-emerald-500 bg-gray-900 border-gray-700"
+                                                />
+                                                <span className="font-semibold text-gray-300">Aktiviert</span>
+                                            </label>
+                                        </div>
+
+                                        {props.worldInfo.comfyEnabled && (
+                                            <div className="space-y-4 bg-gray-950 p-4 rounded-lg border border-gray-800">
+                                                <div>
+                                                    <label className="text-xs font-bold text-gray-400 uppercase">ComfyUI URL</label>
+                                                    <input 
+                                                        type="text"
+                                                        className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white text-xs mt-1 focus:border-emerald-500 outline-none font-mono"
+                                                        value={props.worldInfo.comfyUrl || 'http://127.0.0.1:8188'}
+                                                        placeholder="e.g. http://127.0.0.1:8188"
+                                                        onChange={e => props.onUpdateWorldInfo({ ...props.worldInfo, comfyUrl: e.target.value })}
+                                                    />
+                                                    <p className="text-[10px] text-gray-500 mt-1">
+                                                        Stelle sicher, dass du ComfyUI mit dem Argument <code className="bg-gray-800 px-1 py-0.5 rounded text-gray-300">--enable-cors-header</code> startest, um CORS-Fehler im Browser zu vermeiden.
+                                                    </p>
+                                                </div>
+
+                                                <div>
+                                                    <div className="flex justify-between items-center mb-1">
+                                                        <label className="text-xs font-bold text-gray-400 uppercase">ComfyUI API Workflow (JSON)</label>
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => {
+                                                                if (window.confirm('Möchtest du das standardmäßige KSampler-Workflow-Template laden?')) {
+                                                                    props.onUpdateWorldInfo({ ...props.worldInfo, comfyWorkflow: getDefaultWorkflow() });
+                                                                }
+                                                            }}
+                                                            className="text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-800 hover:bg-emerald-900 px-2 py-0.5 rounded transition-colors"
+                                                        >
+                                                            Reset auf Standard-Template
+                                                        </button>
+                                                    </div>
+                                                    <textarea 
+                                                        className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white text-[10px] focus:border-emerald-500 outline-none font-mono h-40 custom-scrollbar"
+                                                        value={props.worldInfo.comfyWorkflow || ''}
+                                                        placeholder="Füge hier deinen exportierten ComfyUI API JSON Workflow ein..."
+                                                        onChange={e => props.onUpdateWorldInfo({ ...props.worldInfo, comfyWorkflow: e.target.value })}
+                                                    />
+                                                    <p className="text-[10px] text-gray-500 mt-1 leading-relaxed">
+                                                        Füge das im <strong>API-Format</strong> (Export API in ComfyUI aktivieren) gespeicherte JSON ein. Verwende <code className="bg-gray-800 px-1 py-0.5 rounded text-gray-300">PROMPT_PLACEHOLDER</code> im Text-Node sowie <code className="bg-gray-800 px-1 py-0.5 rounded text-gray-300">WIDTH_PLACEHOLDER</code> / <code className="bg-gray-800 px-1 py-0.5 rounded text-gray-300">HEIGHT_PLACEHOLDER</code> in den EmptyLatentImage-Dimensionen.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1718,5 +2022,6 @@ export const Editor: React.FC<EditorProps> = (props) => {
                 </div>
             </div>
         </div>
+        </WorldInfoContext.Provider>
     );
 };

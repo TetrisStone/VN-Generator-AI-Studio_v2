@@ -79,6 +79,39 @@ async function startServer() {
     }
   });
 
+  // API endpoint for Gemini text generation
+  app.post("/api/gemini/generateText", async (req, res) => {
+    try {
+      const { prompt, defaultGeminiModel, worldInfo } = req.body;
+      const apiKey = process.env.GEMINI_API_KEY;
+
+      if (!apiKey) {
+        return res.status(400).json({ error: "GEMINI_API_KEY ist auf dem Server nicht konfiguriert." });
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
+      let model = worldInfo?.llmModel || defaultGeminiModel || "gemini-3.5-flash";
+      const provider = worldInfo?.llmProvider || "gemini";
+
+      if (provider === "gemini" && !model.startsWith("gemini-")) {
+        model = "gemini-3.5-flash";
+      }
+
+      const response = await ai.models.generateContent({
+        model: model,
+        contents: prompt,
+        config: {
+          temperature: 0.7,
+        },
+      });
+
+      res.json({ text: response.text || "" });
+    } catch (error: any) {
+      console.error("Server-side Gemini proxy error:", error);
+      res.status(500).json({ error: error.message || "Fehler bei der Textgenerierung." });
+    }
+  });
+
   // Setup Vite or standard Static Assets Serving
   if (process.env.NODE_ENV !== "production") {
     console.log("Starting server in development mode with Vite middleware...");

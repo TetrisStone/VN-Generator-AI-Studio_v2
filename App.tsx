@@ -131,11 +131,45 @@ const DEFAULT_WORLD: WorldInfo = {
     diceConfig: { skins: {} },
     llmProvider: 'gemini',
     llmModel: 'gemini-3.5-flash',
-    ollamaUrl: 'http://localhost:11434'
+    ollamaUrl: 'http://localhost:11434',
+    comfyUrl: 'http://127.0.0.1:8188',
+    comfyEnabled: false,
+    comfyWorkflow: ''
 };
 
 const PROJECT_STORAGE_KEY = 'vn_creator_project';
 const GAME_SAVE_KEY = 'vn_creator_savegame';
+
+function dataURLToUint8Array(dataUrl: string): { array: Uint8Array; mimeType: string } | null {
+  const arr = dataUrl.split(',');
+  if (arr.length < 2) return null;
+  const mimeMatch = arr[0].match(/:(.*?);/);
+  if (!mimeMatch) return null;
+  const mimeType = mimeMatch[1];
+  try {
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return { array: u8arr, mimeType };
+  } catch (err) {
+    console.error("Failed to decode base64 in dataURLToUint8Array:", err);
+    return null;
+  }
+}
+
+function uint8ArrayToBase64DataURL(arr: Uint8Array, mimeType: string): string {
+  let binary = '';
+  const len = arr.length;
+  const chunk = 8192;
+  for (let i = 0; i < len; i += chunk) {
+    const slice = arr.subarray(i, i + chunk);
+    binary += String.fromCharCode.apply(null, slice as any);
+  }
+  return `data:${mimeType};base64,${btoa(binary)}`;
+}
 
 const App: React.FC = () => {
   const [mode, setMode] = useState<'edit' | 'rpg' | 'vn' | 'battle'>('edit');
@@ -275,7 +309,10 @@ const App: React.FC = () => {
                     systemInstruction: data.worldInfo.systemInstruction || '',
                     llmProvider: data.worldInfo.llmProvider || 'gemini',
                     llmModel: data.worldInfo.llmModel || 'gemini-3.5-flash',
-                    ollamaUrl: data.worldInfo.ollamaUrl || 'http://localhost:11434'
+                    ollamaUrl: data.worldInfo.ollamaUrl || 'http://localhost:11434',
+                    comfyUrl: data.worldInfo.comfyUrl || 'http://127.0.0.1:8188',
+                    comfyEnabled: !!data.worldInfo.comfyEnabled,
+                    comfyWorkflow: data.worldInfo.comfyWorkflow || ''
                 });
             }
 
@@ -332,6 +369,11 @@ const App: React.FC = () => {
   };
 
   const handleExportProject = async () => {
+    // Show a confirmation to ask if they want to include media
+    const includeMedia = confirm(
+      "Möchtest du das Projekt inklusive aller generierten Medien (KI-Bilder, Audio, Video) exportieren?\n\nKlicke 'OK' für das vollständige Projekt (inkl. Bilder, kann bei sehr vielen Bildern fehlschlagen) oder 'Abbrechen' für nur die Projektdaten (ohne Medien, sehr schnell und sicher)."
+    );
+
     setIsProcessing(true);
     try {
       const data = { worldInfo, chapters, characters, scenes, maps, battles };
@@ -339,24 +381,43 @@ const App: React.FC = () => {
       const zip = new JSZip();
       zip.file("project.json", JSON.stringify(data, null, 2));
 
-      // Include all media
-      const imagesFolder = zip.folder("images");
-      const videosFolder = zip.folder("videos");
-      const audioFolder = zip.folder("audio");
+      if (includeMedia) {
+        // Include all media in binary form to save memory and avoid RangeError
+        const imagesFolder = zip.folder("images");
+        const videosFolder = zip.folder("videos");
+        const audioFolder = zip.folder("audio");
 
-      if (imagesFolder && videosFolder && audioFolder) {
-        const { listImageIds } = await import('./utils/imageStorage');
-        const imageIds = await listImageIds();
-        
-        for (const id of imageIds) {
-          const base64 = await loadImage(id);
-          if (base64) {
-            if (base64.startsWith('data:video/')) {
-               videosFolder.file(`${id}.txt`, base64);
-            } else if (base64.startsWith('data:audio/')) {
-               audioFolder.file(`${id}.txt`, base64);
-            } else {
-               imagesFolder.file(`${id}.txt`, base64);
+        if (imagesFolder && videosFolder && audioFolder) {
+          const { listImageIds } = await import('./utils/imageStorage');
+          const imageIds = await listImageIds();
+          
+          for (const id of imageIds) {
+            const base64 = await loadImage(id);
+            if (base64) {
+              const binaryData = dataURLToUint8Array(base64);
+              if (binaryData) {
+                const { array, mimeType } = binaryData;
+                // Encode MIME type in filename to decode on import
+                const safeMime = mimeType.replace('/', '_');
+                const filename = `${id}___${safeMime}.bin`;
+
+                if (base64.startsWith('data:video/')) {
+                   videosFolder.file(filename, array);
+                } else if (base64.startsWith('data:audio/')) {
+                   audioFolder.file(filename, array);
+                } else {
+                   imagesFolder.file(filename, array);
+                }
+              } else {
+                // If it's not a data URL, fallback to saving it as a text file
+                if (base64.startsWith('data:video/')) {
+                   videosFolder.file(`${id}.txt`, base64);
+                } else if (base64.startsWith('data:audio/')) {
+                   audioFolder.file(`${id}.txt`, base64);
+                } else {
+                   imagesFolder.file(`${id}.txt`, base64);
+                }
+              }
             }
           }
         }
@@ -367,14 +428,15 @@ const App: React.FC = () => {
       
       const link = document.createElement('a');
       link.href = href;
-      link.download = `vn-project-${new Date().toISOString().slice(0,10)}.zip`;
+      const mediaSuffix = includeMedia ? "" : "-light";
+      link.download = `vn-project-${new Date().toISOString().slice(0,10)}${mediaSuffix}.zip`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(href);
     } catch (e) {
       console.error("Failed to export project: ", e);
-      alert("Failed to export project.");
+      alert("Failed to export project due to memory or processing limits. Try exporting without media (click Cancel on prompt).");
     } finally {
       setIsProcessing(false);
     }
@@ -441,11 +503,28 @@ const App: React.FC = () => {
           if (folder) {
               const promises: Promise<void>[] = [];
               folder.forEach((relativePath, zipObj) => {
-                  if (!zipObj.dir && relativePath.endsWith('.txt')) {
-                      const id = relativePath.replace('.txt', '');
-                      promises.push(
-                          zipObj.async("text").then(base64 => saveImage(id, base64))
-                      );
+                  if (!zipObj.dir) {
+                      if (relativePath.endsWith('.txt')) {
+                          // Legacy text file containing base64 data
+                          const id = relativePath.replace('.txt', '');
+                          promises.push(
+                              zipObj.async("text").then(base64 => saveImage(id, base64))
+                          );
+                      } else if (relativePath.includes('___') && relativePath.endsWith('.bin')) {
+                          // New binary file containing actual file bytes
+                          const baseName = relativePath.substring(0, relativePath.length - 4); // remove .bin
+                          const parts = baseName.split('___');
+                          if (parts.length === 2) {
+                              const id = parts[0];
+                              const mimeType = parts[1].replace('_', '/');
+                              promises.push(
+                                  zipObj.async("uint8array").then(arr => {
+                                      const base64 = uint8ArrayToBase64DataURL(arr, mimeType);
+                                      return saveImage(id, base64);
+                                  })
+                              );
+                          }
+                      }
                   }
               });
               await Promise.all(promises);
@@ -479,7 +558,10 @@ const App: React.FC = () => {
               systemInstruction: data.worldInfo.systemInstruction || '',
               llmProvider: data.worldInfo.llmProvider || 'gemini',
               llmModel: data.worldInfo.llmModel || 'gemini-3.5-flash',
-              ollamaUrl: data.worldInfo.ollamaUrl || 'http://localhost:11434'
+              ollamaUrl: data.worldInfo.ollamaUrl || 'http://localhost:11434',
+              comfyUrl: data.worldInfo.comfyUrl || 'http://127.0.0.1:8188',
+              comfyEnabled: !!data.worldInfo.comfyEnabled,
+              comfyWorkflow: data.worldInfo.comfyWorkflow || ''
            });
       }
       
@@ -996,7 +1078,18 @@ const App: React.FC = () => {
                  return true;
               }}
               onCharacterUpdate={(updatedChar) => {
-                  setCharacters(prev => prev.map(c => c.id === updatedChar.id ? updatedChar : c));
+                  setCharacters(prev => {
+                      const newList = prev.map(c => c.id === updatedChar.id ? updatedChar : c);
+                      setProjectItem('characters', newList).catch(console.error);
+                      return newList;
+                  });
+              }}
+              onSceneUpdate={(updatedScene) => {
+                  setScenes(prev => {
+                      const newList = prev.map(s => s.id === updatedScene.id ? updatedScene : s);
+                      setProjectItem('scenes', newList).catch(console.error);
+                      return newList;
+                  });
               }}
             />
           </motion.div>
