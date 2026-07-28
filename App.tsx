@@ -8,7 +8,7 @@ import { BattleArena } from './components/BattleArena';
 import { StoryJournal } from './components/StoryJournal';
 import { SettingsOverlay } from './components/SettingsOverlay';
 import { audioManager } from './utils/audioManager';
-import { Character, Scene, GameSaveData, RPGState, WorldMap, ChatMessage, Battle, WorldInfo, Chapter, StoryLogEntry } from './types';
+import { Character, Scene, GameSaveData, RPGState, WorldMap, ChatMessage, Battle, WorldInfo, Chapter, StoryLogEntry, AssetItem } from './types';
 import { getItem, setItem, getProjectItem, setProjectItem } from './utils/db';
 import { loadImage, saveImage } from './utils/imageStorage';
 import JSZip from 'jszip';
@@ -81,6 +81,7 @@ const DEFAULT_CHARS: Character[] = [
 const DEFAULT_CHAPTERS: Chapter[] = [
   {
     id: 'ch1',
+    order: 1,
     name: 'Chapter 1: The Beginning',
     description: 'The heroes meet in the workshop. The world is dark and industrial.'
   }
@@ -90,6 +91,8 @@ const DEFAULT_SCENES: Scene[] = [
   {
     id: 's1',
     chapterId: 'ch1',
+    order: 1,
+    isMainScene: true,
     name: 'The Workshop',
     locationName: 'Kael\'s Garage',
     backgroundSrc: null,
@@ -140,7 +143,18 @@ const DEFAULT_WORLD: WorldInfo = {
 const PROJECT_STORAGE_KEY = 'vn_creator_project';
 const GAME_SAVE_KEY = 'vn_creator_savegame';
 
+function uint8ArrayToBase64DataURLAsync(arr: Uint8Array, mimeType: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const blob = new Blob([arr], { type: mimeType });
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
 function dataURLToUint8Array(dataUrl: string): { array: Uint8Array; mimeType: string } | null {
+  if (!dataUrl || typeof dataUrl !== 'string') return null;
   const arr = dataUrl.split(',');
   if (arr.length < 2) return null;
   const mimeMatch = arr[0].match(/:(.*?);/);
@@ -160,17 +174,6 @@ function dataURLToUint8Array(dataUrl: string): { array: Uint8Array; mimeType: st
   }
 }
 
-function uint8ArrayToBase64DataURL(arr: Uint8Array, mimeType: string): string {
-  let binary = '';
-  const len = arr.length;
-  const chunk = 8192;
-  for (let i = 0; i < len; i += chunk) {
-    const slice = arr.subarray(i, i + chunk);
-    binary += String.fromCharCode.apply(null, slice as any);
-  }
-  return `data:${mimeType};base64,${btoa(binary)}`;
-}
-
 const App: React.FC = () => {
   const [mode, setMode] = useState<'edit' | 'rpg' | 'vn' | 'battle'>('edit');
   
@@ -181,6 +184,7 @@ const App: React.FC = () => {
   const [scenes, setScenes] = useState<Scene[]>(DEFAULT_SCENES);
   const [maps, setMaps] = useState<WorldMap[]>(DEFAULT_MAPS);
   const [battles, setBattles] = useState<Battle[]>(DEFAULT_BATTLES);
+  const [assets, setAssets] = useState<AssetItem[]>([]);
   
   // Game Play State
   const [rpgState, setRpgState] = useState<RPGState>({ 
@@ -251,8 +255,9 @@ const App: React.FC = () => {
             data.scenes = await getProjectItem('scenes');
             data.battles = await getProjectItem('battles');
             data.maps = await getProjectItem('maps');
+            data.assets = await getProjectItem('assets');
             
-            if (data.worldInfo || data.chapters || data.characters || data.scenes) {
+            if (data.worldInfo || data.chapters || data.characters || data.scenes || data.assets) {
                 hasData = true;
             }
         } catch (e) {
@@ -316,8 +321,13 @@ const App: React.FC = () => {
                 });
             }
 
-            if (data.chapters) setChapters(data.chapters);
-            else {
+            if (data.chapters) {
+                const migratedChapters = data.chapters.map((c: any, index: number) => ({
+                    ...c,
+                    order: c.order ?? index + 1
+                }));
+                setChapters(migratedChapters);
+            } else {
                 // Ensure at least one chapter exists for migration
                 setChapters(DEFAULT_CHAPTERS);
             }
@@ -326,10 +336,12 @@ const App: React.FC = () => {
             
             // Migration logic
             if (data.scenes) {
-                const migratedScenes = data.scenes.map((s: any) => ({
+                const migratedScenes = data.scenes.map((s: any, index: number) => ({
                     ...s,
                     // If scene doesn't have a chapter, assign to first available chapter
                     chapterId: s.chapterId || DEFAULT_CHAPTERS[0].id,
+                    order: s.order ?? index + 1,
+                    isMainScene: s.isMainScene ?? true,
                     effects: s.effects || s.unlocks || [],
                     isRepeatable: s.isRepeatable || false,
                     locationName: s.locationName || s.name || 'Unknown Location',
@@ -352,31 +364,29 @@ const App: React.FC = () => {
 
             if (data.maps) setMaps(data.maps);
             else if (data.mapConfig) setMaps([{ ...data.mapConfig, id: 'map1', name: 'Default Map' }]);
+
+            if (data.assets) setAssets(data.assets);
         }
     };
     initLoad();
   }, []);
 
   const handleQuickSave = async () => {
-    const data = { worldInfo, chapters, characters, scenes, maps, battles };
+    const data = { worldInfo, chapters, characters, scenes, maps, battles, assets };
     await setProjectItem('worldInfo', data.worldInfo);
     await setProjectItem('chapters', data.chapters);
     await setProjectItem('characters', data.characters);
     await setProjectItem('scenes', data.scenes);
     await setProjectItem('battles', data.battles);
     await setProjectItem('maps', data.maps);
+    await setProjectItem('assets', data.assets);
     return true;
   };
 
-  const handleExportProject = async () => {
-    // Show a confirmation to ask if they want to include media
-    const includeMedia = confirm(
-      "Möchtest du das Projekt inklusive aller generierten Medien (KI-Bilder, Audio, Video) exportieren?\n\nKlicke 'OK' für das vollständige Projekt (inkl. Bilder, kann bei sehr vielen Bildern fehlschlagen) oder 'Abbrechen' für nur die Projektdaten (ohne Medien, sehr schnell und sicher)."
-    );
-
+  const handleExportProject = async (includeMedia: boolean = true) => {
     setIsProcessing(true);
     try {
-      const data = { worldInfo, chapters, characters, scenes, maps, battles };
+      const data = { worldInfo, chapters, characters, scenes, maps, battles, assets };
       
       const zip = new JSZip();
       zip.file("project.json", JSON.stringify(data, null, 2));
@@ -436,7 +446,7 @@ const App: React.FC = () => {
       URL.revokeObjectURL(href);
     } catch (e) {
       console.error("Failed to export project: ", e);
-      alert("Failed to export project due to memory or processing limits. Try exporting without media (click Cancel on prompt).");
+      alert("Failed to export project due to memory limits. Try exporting 'Light (nur Daten)' instead.");
     } finally {
       setIsProcessing(false);
     }
@@ -497,42 +507,77 @@ const App: React.FC = () => {
         const content = await projectFile.async("text");
         data = JSON.parse(content);
 
-        // Extract media
-        const processMediaFolder = async (folderName: string) => {
-          const folder = unzipped.folder(folderName);
-          if (folder) {
-              const promises: Promise<void>[] = [];
-              folder.forEach((relativePath, zipObj) => {
-                  if (!zipObj.dir) {
-                      if (relativePath.endsWith('.txt')) {
-                          // Legacy text file containing base64 data
-                          const id = relativePath.replace('.txt', '');
-                          promises.push(
-                              zipObj.async("text").then(base64 => saveImage(id, base64))
-                          );
-                      } else if (relativePath.includes('___') && relativePath.endsWith('.bin')) {
-                          // New binary file containing actual file bytes
-                          const baseName = relativePath.substring(0, relativePath.length - 4); // remove .bin
-                          const parts = baseName.split('___');
-                          if (parts.length === 2) {
-                              const id = parts[0];
-                              const mimeType = parts[1].replace('_', '/');
-                              promises.push(
-                                  zipObj.async("uint8array").then(arr => {
-                                      const base64 = uint8ArrayToBase64DataURL(arr, mimeType);
-                                      return saveImage(id, base64);
-                                  })
-                              );
-                          }
-                      }
+        // Extract media files reliably from any path in zip
+        const mediaPromises: Promise<void>[] = [];
+        let mediaCount = 0;
+
+        for (const zipPath of Object.keys(unzipped.files)) {
+          const zipObj = unzipped.files[zipPath];
+          if (zipObj.dir) continue;
+          
+          // Strip any parent directory paths to get pure filename
+          const filename = zipPath.split('/').pop();
+          if (!filename || filename === 'project.json') continue;
+
+          if (filename.endsWith('.txt')) {
+            // Legacy base64 text file
+            const id = filename.replace('.txt', '');
+            mediaPromises.push(
+              zipObj.async("text").then(async base64 => {
+                if (base64 && base64.trim().length > 0) {
+                  await saveImage(id, base64.trim());
+                  mediaCount++;
+                }
+              }).catch(err => console.error("Error importing text file:", filename, err))
+            );
+          } else if (filename.includes('___') && filename.endsWith('.bin')) {
+            // New binary file: id___safeMime.bin
+            const baseName = filename.substring(0, filename.length - 4); // strip .bin
+            const parts = baseName.split('___');
+            if (parts.length >= 2) {
+              const id = parts[0];
+              const mimeType = parts[1].replace('_', '/');
+              mediaPromises.push(
+                zipObj.async("uint8array").then(async arr => {
+                  if (arr && arr.length > 0) {
+                    const base64 = await uint8ArrayToBase64DataURLAsync(arr, mimeType);
+                    await saveImage(id, base64);
+                    mediaCount++;
                   }
-              });
-              await Promise.all(promises);
+                }).catch(err => console.error("Error importing binary media file:", filename, err))
+              );
+            }
+          } else {
+            // Standard media extensions (e.g. uuid.png, uuid.jpg, etc.)
+            const extMatch = filename.match(/\.(png|jpg|jpeg|webp|gif|mp4|webm|mp3|wav|ogg)$/i);
+            if (extMatch) {
+              const ext = extMatch[1].toLowerCase();
+              const id = filename.substring(0, filename.lastIndexOf('.'));
+              let mimeType = 'image/png';
+              if (ext === 'jpg' || ext === 'jpeg') mimeType = 'image/jpeg';
+              else if (ext === 'webp') mimeType = 'image/webp';
+              else if (ext === 'gif') mimeType = 'image/gif';
+              else if (ext === 'mp4') mimeType = 'video/mp4';
+              else if (ext === 'webm') mimeType = 'video/webm';
+              else if (ext === 'mp3') mimeType = 'audio/mp3';
+              else if (ext === 'wav') mimeType = 'audio/wav';
+              else if (ext === 'ogg') mimeType = 'audio/ogg';
+
+              mediaPromises.push(
+                zipObj.async("uint8array").then(async arr => {
+                  if (arr && arr.length > 0) {
+                    const base64 = await uint8ArrayToBase64DataURLAsync(arr, mimeType);
+                    await saveImage(id, base64);
+                    mediaCount++;
+                  }
+                }).catch(err => console.error("Error importing standard media file:", filename, err))
+              );
+            }
           }
-        };
-        await processMediaFolder("images");
-        await processMediaFolder("videos");
-        await processMediaFolder("audio");
+        }
+
+        await Promise.all(mediaPromises);
+        console.log(`Successfully imported ${mediaCount} media files into IndexedDB.`);
       } else {
         // Fallback for legacy JSON imports
         const content = await new Promise<string>((resolve, reject) => {
@@ -606,12 +651,16 @@ const App: React.FC = () => {
       if (data.maps) setMaps(data.maps);
       else if (data.mapConfig) setMaps([{ ...data.mapConfig, id: 'map1', name: 'Default Map' }]);
       
+      if (data.assets) setAssets(data.assets);
+      else setAssets([]);
+
       await setProjectItem('worldInfo', data.worldInfo);
       await setProjectItem('chapters', data.chapters);
       await setProjectItem('characters', data.characters);
       await setProjectItem('scenes', data.scenes);
       await setProjectItem('battles', data.battles);
       await setProjectItem('maps', data.maps);
+      await setProjectItem('assets', data.assets || []);
       
       alert("Project loaded successfully!");
     } catch (error) {
@@ -632,8 +681,33 @@ const App: React.FC = () => {
     });
     setCharacters(resetChars);
 
+    // Default start at first chapter (sorted chronologically)
+    const sortedChaps = [...chapters].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const firstChapter = sortedChaps[0];
+    const firstChapterId = firstChapter?.id || chapters[0]?.id || 'ch1';
+
+    // Find the first scene in the first chapter
+    const firstChapterScenes = scenes
+        .filter(s => s.chapterId === firstChapterId)
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const firstScene = firstChapterScenes[0];
+
+    // Determine initial map mapped to the first scene in the first chapter
+    let initialMapId = maps[0]?.id || 'map1';
+    if (firstScene) {
+        if (firstScene.mapId && maps.some(m => m.id === firstScene.mapId)) {
+            initialMapId = firstScene.mapId;
+        } else {
+            const mapWithSceneSpot = maps.find(m => m.spots?.some(spot => spot.type === 'scene' && spot.sceneId === firstScene.id));
+            if (mapWithSceneSpot) {
+                initialMapId = mapWithSceneSpot.id;
+            }
+        }
+    }
+
     setRpgState({ 
-        currentMapId: maps[0].id, 
+        currentChapterId: firstChapterId,
+        currentMapId: initialMapId, 
         completedSceneIds: [], 
         completedBattleIds: [],
         unlockedIds: [],
@@ -984,6 +1058,7 @@ const App: React.FC = () => {
               scenes={scenes}
               maps={maps}
               battles={battles}
+              assets={assets}
               storyLog={rpgState.storyLog} // PASS STORY LOG TO EDITOR
               onUpdateWorldInfo={setWorldInfo}
               onUpdateChapters={setChapters}
@@ -991,6 +1066,10 @@ const App: React.FC = () => {
               onUpdateScenes={setScenes}
               onUpdateMaps={setMaps}
               onUpdateBattles={setBattles}
+              onUpdateAssets={(updatedAssets) => {
+                setAssets(updatedAssets);
+                setProjectItem('assets', updatedAssets).catch(console.error);
+              }}
               onPlay={handleStartNewGame}
               onQuickSave={handleQuickSave}
               onExportProject={handleExportProject}

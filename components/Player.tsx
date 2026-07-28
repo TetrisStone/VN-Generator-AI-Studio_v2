@@ -36,6 +36,7 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
 
   // Dev Tools State
   const [showDevTools, setShowDevTools] = useState(false);
+  const [showGoalPopover, setShowGoalPopover] = useState(false);
   const [lastTokenStats, setLastTokenStats] = useState<{promptTokens?: number, completionTokens?: number, totalTokens?: number} | null>(null);
 
   // Notifications for Relationship Updates
@@ -342,29 +343,43 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
       {/* Top Bar Navigation */}
       <div className="absolute top-2 left-2 right-2 md:top-4 md:left-4 md:right-4 z-50 flex justify-between items-start pointer-events-none gap-2">
         
-        {/* Left Side Controls */}
-        <div className="flex flex-col gap-2 pointer-events-auto">
+        {/* Left Side Controls & Headers */}
+        <div className="flex flex-col gap-2 pointer-events-auto items-start">
+          
+          {/* Location & Chapter Header (Ganz nach links über Resume) */}
+          <div className="flex flex-col items-start gap-0.5 mb-1 max-w-[280px] sm:max-w-md">
+             <div className="flex items-center gap-1.5 text-xs md:text-sm text-emerald-300 font-bold bg-black/75 px-3 py-1.5 rounded-xl md:rounded-full backdrop-blur-md border border-white/10 shadow-lg">
+                <MapPin size={14} className="text-emerald-400 flex-shrink-0" />
+                <span className="truncate">{currentScene.locationName || currentScene.name || 'Unknown Location'}</span>
+             </div>
+             {currentChapter && (
+                <span className="text-[9px] md:text-[10px] text-gray-400 font-medium uppercase tracking-widest pl-2 truncate max-w-full">
+                   {currentChapter.name}
+                </span>
+             )}
+          </div>
+
           {/* Back / Pause Button */}
           <button 
              onClick={() => handleManualExit(false)}
-             className="flex items-center gap-1 md:gap-2 bg-black/50 hover:bg-black/70 text-gray-200 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-md border border-white/10 transition-all hover:scale-105 shadow-lg group flex-shrink-0"
+             className="flex items-center gap-1 md:gap-2 bg-black/60 hover:bg-black/80 text-gray-200 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-md border border-white/10 transition-all hover:scale-105 shadow-lg group flex-shrink-0"
           >
              <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
-             <span className="font-semibold text-xs md:text-sm hidden sm:inline">Resume</span>
+             <span className="font-semibold text-xs md:text-sm">Resume</span>
           </button>
           
           {/* Dev Tools Toggle */}
           <button 
              onClick={() => setShowDevTools(!showDevTools)}
-             className={`flex items-center gap-1 md:gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-md border transition-all shadow-lg flex-shrink-0 ${showDevTools ? 'bg-emerald-600/80 border-emerald-400 text-white' : 'bg-black/50 hover:bg-black/70 border-white/10 text-gray-300'}`}
+             className={`flex items-center gap-1 md:gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-md border transition-all shadow-lg flex-shrink-0 ${showDevTools ? 'bg-emerald-600/80 border-emerald-400 text-white' : 'bg-black/60 hover:bg-black/80 border-white/10 text-gray-300'}`}
           >
              <Cpu size={14} />
-             <span className="font-semibold text-xs md:text-sm hidden sm:inline">Dev Tools</span>
+             <span className="font-semibold text-xs md:text-sm">Dev Tools</span>
           </button>
 
           {/* Dev Tools Panel */}
           {showDevTools && (
-             <div className="bg-black/80 backdrop-blur-md border border-emerald-500/30 p-3 rounded-xl min-w-[200px] text-xs font-mono text-gray-300 shadow-xl animate-in fade-in slide-in-from-left-4">
+             <div className="bg-black/90 backdrop-blur-md border border-emerald-500/30 p-3 rounded-xl min-w-[200px] text-xs font-mono text-gray-300 shadow-xl animate-in fade-in slide-in-from-left-4">
                 <div className="font-bold text-emerald-400 mb-2 border-b border-emerald-500/30 pb-1">Token Usage (Last Turn)</div>
                 {lastTokenStats ? (
                   <div className="flex flex-col gap-1">
@@ -382,30 +397,53 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
           {worldInfo?.comfyEnabled && (
              <button 
                 onClick={handleOpenComfyModal}
-                className="flex items-center gap-1 md:gap-2 bg-purple-900/60 border border-purple-500/50 hover:bg-purple-850 text-purple-100 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-md transition-all hover:scale-105 shadow-lg flex-shrink-0"
+                className="flex items-center gap-1 md:gap-2 bg-purple-900/70 border border-purple-500/50 hover:bg-purple-800 text-purple-100 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-md transition-all hover:scale-105 shadow-lg flex-shrink-0"
              >
                 <Sparkles size={14} className="animate-pulse text-purple-400" />
                 <span className="font-semibold text-xs md:text-sm">KI Generieren</span>
              </button>
           )}
-        </div>
 
-        {/* Location / Chapter Display & Goal */}
-        <div className="bg-black/60 backdrop-blur-md border border-white/10 px-3 py-1.5 md:px-4 md:py-2 rounded-xl md:rounded-full text-emerald-200 font-bold shadow-lg flex flex-col items-center max-w-[50%] md:max-w-md w-full">
-            <div className="flex items-center gap-1 md:gap-2 text-xs md:text-sm text-center">
-               <MapPin size={12} className="text-emerald-400 flex-shrink-0" />
-               <span className="truncate">{currentScene.locationName || 'Unknown Location'}</span>
-            </div>
-            {currentChapter && <span className="text-[9px] md:text-[10px] text-gray-400 font-normal uppercase tracking-widest truncate max-w-full">{currentChapter.name}</span>}
-            {!goalReached && (
-                <div className="mt-1 flex items-center gap-1 md:gap-2 text-[10px] md:text-xs text-green-400 border-t border-white/10 pt-1 w-full justify-center">
-                   <Target size={10} className="flex-shrink-0" />
-                   <span className="truncate text-center">Goal: {currentScene.goal}</span>
+          {/* Goal Button & Popover (Ganz nach links unter KI Generieren) */}
+          <div className="relative pointer-events-auto">
+             <button 
+                onClick={() => setShowGoalPopover(!showGoalPopover)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-md border transition-all shadow-lg text-xs md:text-sm font-semibold ${
+                   showGoalPopover 
+                      ? 'bg-emerald-700/90 border-emerald-400 text-white' 
+                      : goalReached 
+                        ? 'bg-emerald-900/80 border-emerald-500 text-emerald-200' 
+                        : 'bg-black/60 hover:bg-black/80 border-emerald-500/40 text-emerald-300'
+                }`}
+             >
+                <Target size={14} className="text-emerald-400" />
+                <span>Goal</span>
+                {goalReached && <span className="ml-1 px-1.5 py-0.2 bg-emerald-500 text-black text-[10px] rounded-full font-bold">✓</span>}
+             </button>
+
+             {showGoalPopover && (
+                <div className="absolute top-full left-0 mt-2 bg-black/90 backdrop-blur-md border border-emerald-500/40 p-3.5 rounded-xl min-w-[220px] max-w-[300px] text-xs text-emerald-100 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2">
+                   <div className="flex justify-between items-center mb-1.5 pb-1 border-b border-emerald-500/30">
+                      <span className="font-bold text-emerald-400 flex items-center gap-1">
+                         <Target size={12}/> Szenen-Ziel
+                      </span>
+                      <button onClick={() => setShowGoalPopover(false)} className="text-gray-400 hover:text-white text-xs px-1">✕</button>
+                   </div>
+                   <p className="text-xs text-gray-200 leading-relaxed">
+                      {currentScene.goal || 'Kein bestimmtes Ziel angegeben.'}
+                   </p>
+                   {goalReached && goalReason && (
+                      <div className="mt-2 pt-2 border-t border-emerald-500/20 text-[11px] text-emerald-300 italic">
+                         ✓ Erreicht: {goalReason}
+                      </div>
+                   )}
                 </div>
-            )}
+             )}
+          </div>
+
         </div>
 
-        {/* Goal Indicator */}
+        {/* Goal Reached Action Button */}
         <div className={`pointer-events-auto flex flex-col items-end gap-1 md:gap-2 transition-all duration-500 flex-shrink-0 ${goalReached ? 'translate-y-0 opacity-100' : '-translate-y-4 opacity-0'}`}>
            {goalReached && (
              <>
@@ -442,9 +480,12 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
           ))}
       </div>
 
+      {/* Opaque Solid Shadow Layer at bottom (verhindert Sichtbarkeit halber Charaktere) */}
+      <div className="absolute bottom-0 left-0 right-0 z-[15] h-[26vh] bg-black pointer-events-none" />
+
       {/* Character Layer - Positioned above the background, below UI */}
       {/* We use visibleCharacters map to ensure characters without portraits don't take up layout space */}
-      <div className="absolute bottom-[36vh] left-0 right-0 z-20 flex justify-center items-end px-10 h-[60vh] pointer-events-none">
+      <div className="absolute bottom-[25vh] left-0 right-0 z-20 flex justify-center items-end px-10 h-[65vh] pointer-events-none">
         {visibleCharacters.map((char, idx) => {
            const currentEmotion = latestEmotions[char.id] || 'idle';
            let currentSrc = char.imageSrc;
@@ -466,7 +507,7 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
                   <AsyncImage 
                     src={currentSrc} 
                     alt={char.name} 
-                    className="max-h-[60vh] w-auto object-contain drop-shadow-2xl"
+                    className="max-h-[65vh] w-auto object-contain drop-shadow-2xl"
                   />
                 )}
                <div className="absolute bottom-2 left-0 right-0 text-center">
@@ -494,9 +535,9 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
         </div>
       )}
 
-      {/* UI Layer - Chat Box */}
-      <div className="absolute bottom-0 left-0 right-0 z-30 p-2 md:p-8 bg-gradient-to-t from-black via-black/90 to-transparent pt-16 md:pt-24">
-        <div className="max-w-4xl mx-auto bg-black/80 border border-gray-700 rounded-xl backdrop-blur-md shadow-2xl overflow-hidden flex flex-col h-[35vh] md:h-[35vh]">
+      {/* UI Layer - Chat Box (Höhe reduziert auf 26vh) */}
+      <div className="absolute bottom-0 left-0 right-0 z-30 p-2 md:p-4 pt-10 md:pt-14 bg-gradient-to-t from-black via-black via-80% to-transparent">
+        <div className="max-w-4xl mx-auto bg-black/85 border border-gray-700/80 rounded-xl backdrop-blur-md shadow-2xl overflow-hidden flex flex-col h-[26vh] md:h-[26vh]">
           
           {/* Chat History */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto p-2 md:p-4 space-y-3 md:space-y-4">

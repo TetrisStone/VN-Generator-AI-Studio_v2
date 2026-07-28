@@ -40,6 +40,7 @@ export const loadImage = async (id: string): Promise<string | null> => {
 };
 
 export const deleteImage = async (id: string): Promise<void> => {
+  if (!id || id.startsWith('data:') || id.startsWith('http')) return;
   try {
     const db = await getDB();
     return new Promise((resolve, reject) => {

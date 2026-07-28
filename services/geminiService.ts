@@ -82,6 +82,7 @@ function buildSceneGenSchema(allCharacterIds: string[]): Schema {
       aiInstructions: { type: Type.STRING, description: "Hidden instructions for the AI on how to play the characters." },
       sensoryDetails: { type: Type.STRING, description: "Smells, sounds, lighting." },
       environmentDetails: { type: Type.STRING, description: "Physical layout description." },
+      suggestedBackgroundSrc: { type: Type.STRING, description: "ID of the background asset selected from the AVAILABLE ASSETS IN LIBRARY (or empty if none matches)." },
       characters: {
         type: Type.ARRAY,
         items: {
@@ -197,11 +198,17 @@ export const generateAutoScene = async (
     allCharacters: Character[],
     storyLog: StoryLogEntry[],
     worldInfo: WorldInfo,
-    customPrompt?: string
-): Promise<Partial<Scene>> => {
+    customPrompt?: string,
+    assets?: AssetItem[]
+): Promise<Partial<Scene> & { suggestedBackgroundSrc?: string }> => {
     const charList = allCharacters.map(c => `ID: ${c.id} | Name: ${c.name} | Role: ${c.defaultDescription}`).join('\n');
     
     const recentEvents = storyLog.slice(-5).map(e => `[${e.sceneName}] ${e.summary}`).join('\n');
+
+    const bgAssetList = (assets || [])
+      .filter(a => a.category === 'scene_bg')
+      .map(a => `[Asset ID: ${a.fileUrl || a.id}] Name: "${a.name}" | Environment: ${a.locationMeta?.environment || 'indoor'} | Tags: ${a.locationMeta?.tags?.join(', ') || 'none'}`)
+      .join('\n');
 
     const prompt = `
         Task: Create a NEW scene for a Visual Novel RPG.
@@ -209,8 +216,11 @@ export const generateAutoScene = async (
         WORLD SETTING:
         ${worldInfo.description}
         
-        AVAILABLE ASSETS (CHARACTERS):
+        AVAILABLE CHARACTERS:
         ${charList}
+
+        AVAILABLE SCENE BACKGROUND ASSETS IN LIBRARY:
+        ${bgAssetList || "No background assets in library."}
         
         RECENT STORY EVENTS (Context):
         ${recentEvents || "The story is just beginning."}
@@ -222,7 +232,7 @@ export const generateAutoScene = async (
         2. DO NOT invent new characters. Use ONLY the IDs provided in the list above.
         3. Pick 1-3 characters to include.
         4. Define a clear location, description, and goal.
-        5. If it's a chill scene, the goal can be "Chat with X" or "Relax".
+        5. If a background asset from the AVAILABLE SCENE BACKGROUND ASSETS IN LIBRARY matches the scene location/setting, set "suggestedBackgroundSrc" to its exact Asset ID.
         6. Provide hidden AI instructions on how the characters should behave in this specific context.
         7. The output must be valid JSON matching the schema.
         ${customPrompt ? '8. **VERY IMPORTANT**: You MUST honor the USER\'S CUSTOM REQUEST specified above when designing this scene.' : ''}
@@ -332,28 +342,33 @@ export const generateImagePromptContext = async (
   worldInfo?: WorldInfo,
 ): Promise<string> => {
   const recentHistory = history.slice(-5).map(msg => `${msg.sender}: ${msg.text}`).join('\n');
+  const primaryChar = activeCharacters[0]?.name || "Character";
   const charDetails = activeCharacters.map(c => c.name).join(', ');
 
   const prompt = `
-Du bist ein Experte für Prompts für ComfyUI / Stable Diffusion.
-Der Benutzer möchte ein "Event CG" (ein vollflächiges Bild der aktuellen Szene) für eine Visual Novel generieren.
+Du bist ein Experte für Image Generation Prompts im Danbooru-Tag-Stil (ComfyUI / Stable Diffusion / Anime Visual Novels).
+Erstelle eine kommagetrennte Liste englischer Danbooru-Tags für ein Event CG Bild der aktuellen Szene.
 
 AKTUELLE SZENE:
 Name: ${scene.name}
+Ort/Umgebung: ${scene.locationName || ''}
 Beschreibung: ${scene.description || ''}
-Sensorische Details: ${scene.sensoryDetails || ''}
+Details: ${scene.sensoryDetails || ''} ${scene.environmentDetails || ''}
 
-ANWESENDE CHARAKTERE:
-${charDetails}
+HAUPTCHARAKTER IM FOKUS:
+${primaryChar} (Anwesende: ${charDetails})
 
 KÜRZLICHER CHATVERLAUF:
 ${recentHistory}
 
-AUFGABE:
-Basierend NUR auf dem Chatverlauf und der Szenenbeschreibung, schreibe EINEN KURZEN SATZ auf Englisch, der visuell beschreibt, was gerade passiert. 
-Fokussiere dich auf Handlungen, Gefühle, Gesten und Blickrichtungen der Charaktere.
-Beispiel: "Elara is sitting on the bed looking surprised, while Peripé is standing by the window pointing outside."
-Gib NUR den zusammenfassenden String zurück, ohne weitere Erklärungen oder Formatierungen.
+STRIKTE REGELN FÜR DEN PROMPT:
+1. DANBOORU TAG STIL: Gib NUR eine kommagetrennte Liste englischer Tags zurück (z.B. "1girl, solo, bedroom, sitting on bed, looking at viewer, view from front, night, surprised expression, blushing, soft indoor lighting").
+2. NUR EINE PERSON IM FOKUS: Beschreibe IMMER genau 1 Person (Tag "1girl" oder "1boy", "solo"). Wenn mehrere Charaktere anwesend sind, wähle den wichtigsten/fokussierten Hauptcharakter. ZIELE NICHT darauf ab, mehrere Personen darzustellen!
+3. ZWINGENDE UMGEBUNG/SETTING: Beschreibe die Umgebung und den Raum/Ort detailliert (z.B. "tavern, wooden bar, tavern interior, warm lighting" oder "bedroom, bed, window, night").
+4. ZWINGENDE VIEWER-POSITION: Beschreibe die Perspektive/Position des Betrachters (z.B. "looking at viewer", "from viewer's perspective", "view from front", "close-up", "cowboy shot").
+5. ZWINGENDE BLICKRICHTUNG: Beschreibe exakt, wohin der Charakter schaut (z.B. "looking at viewer", "looking away", "looking down", "looking to the side").
+
+Antworte AUSSCHLIESSLICH mit den kommagetrennten Tags, ohne Erklärungen, ohne Anführungszeichen, ohne Markdown-Formatierungen.
 `;
 
   try {

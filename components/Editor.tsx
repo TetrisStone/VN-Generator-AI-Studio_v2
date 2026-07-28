@@ -1,10 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Character, Scene, WorldMap, Battle, WorldInfo, Chapter, SceneEffect, MapSpot, WorldLocation, Faction, RelationshipTrigger, RelationshipThreshold, StoryLogEntry } from '../types';
+import { Character, CharacterImportance, CharacterAlignment, Scene, WorldMap, Battle, WorldInfo, Chapter, SceneEffect, MapSpot, WorldLocation, Faction, RelationshipTrigger, RelationshipThreshold, StoryLogEntry, AssetItem } from '../types';
 import { Button } from './ui/Button';
-import { Trash, Sword, Scaling, Plus, Save, Play, Download, Upload, Monitor, Map as MapIcon, Users, Target, Book, Layout, MessageSquare, Unlock, Lock, Waypoints, Image as ImageIcon, XCircle, Terminal, MapPin, Heart, EyeOff, Video, Music, Sparkles, Loader2, ArrowLeft, Cpu } from 'lucide-react';
+import { Trash, Sword, Scaling, Plus, Save, Play, Download, Upload, Monitor, Map as MapIcon, Users, Target, Book, Layout, MessageSquare, Unlock, Lock, Waypoints, Image as ImageIcon, XCircle, Terminal, MapPin, Heart, EyeOff, Video, Music, Sparkles, Loader2, ArrowLeft, Cpu, Check, FolderOpen, ChevronUp, ChevronDown, ExternalLink, X, Move, ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { CHARACTER_GROUPS, getCharacterGroupKey, getCharacterGroup, CharacterGroupKey } from '../utils/characterUtils';
 import { generateAutoScene } from '../services/geminiService';
 import { AsyncImage } from './ui/AsyncImage';
 import { AsyncVideo } from './ui/AsyncVideo';
+import { AssetManager } from './AssetManager';
+import { AssetSelectorModal } from './AssetSelectorModal';
 
 import { saveImage, loadImage, deleteImage } from '../utils/imageStorage';
 import { generateComfyImage, prepareComfyWorkflow, getDefaultWorkflow } from '../services/comfyService';
@@ -16,16 +19,18 @@ interface ImageFieldProps {
   value: string | null;
   onChange: (val: string | null) => void;
   defaultPrompt?: string;
+  assets?: AssetItem[];
 }
 
-const ImageField: React.FC<ImageFieldProps> = ({ label, value, onChange, defaultPrompt = '' }) => {
+const ImageField: React.FC<ImageFieldProps> = ({ label, value, onChange, defaultPrompt = '', assets }) => {
     const inputRef = useRef<HTMLInputElement>(null);
     const [imgSrc, setImgSrc] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
 
-    // AI Generation Modal States
+    // AI Generation & Asset Selector Modal States
     const [showAiModal, setShowAiModal] = useState(false);
+    const [showAssetSelector, setShowAssetSelector] = useState(false);
     const [aiPrompt, setAiPrompt] = useState('');
     const [aiStatus, setAiStatus] = useState('');
     const [isAiGenerating, setIsAiGenerating] = useState(false);
@@ -167,9 +172,14 @@ const ImageField: React.FC<ImageFieldProps> = ({ label, value, onChange, default
                 >
                     <img src={imgSrc} className="w-full h-full object-contain" alt={label} />
                     <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                         <button onClick={() => inputRef.current?.click()} className="p-2 bg-emerald-600 rounded text-white hover:bg-emerald-500 transition-colors shadow-lg" title="Bilde hochladen">
+                         <button onClick={() => inputRef.current?.click()} className="p-2 bg-emerald-600 rounded text-white hover:bg-emerald-500 transition-colors shadow-lg" title="Bild hochladen">
                             <Upload size={16}/>
                          </button>
+                         {assets && assets.length > 0 && (
+                            <button onClick={() => setShowAssetSelector(true)} className="p-2 bg-blue-600 rounded text-white hover:bg-blue-500 transition-colors shadow-lg" title="Aus Asset Library wählen">
+                               <FolderOpen size={16}/>
+                            </button>
+                         )}
                          <button onClick={handleOpenAiModal} className="p-2 bg-purple-600 rounded text-white hover:bg-purple-500 transition-colors shadow-lg" title="KI Generieren">
                             <Sparkles size={16}/>
                          </button>
@@ -188,7 +198,7 @@ const ImageField: React.FC<ImageFieldProps> = ({ label, value, onChange, default
                     onDrop={handleDrop}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
-                    className={`w-full h-24 flex items-center justify-center transition-all gap-3 group rounded border border-dashed p-1 ${
+                    className={`w-full h-24 flex items-center justify-center transition-all gap-2 group rounded border border-dashed p-1 ${
                         isDragging 
                             ? 'bg-emerald-900/50 border-emerald-400 text-emerald-300' 
                             : 'bg-gray-800/50 border-gray-600 text-gray-500'
@@ -203,21 +213,49 @@ const ImageField: React.FC<ImageFieldProps> = ({ label, value, onChange, default
                                 className="flex-1 h-full flex flex-col items-center justify-center hover:bg-gray-800 rounded transition gap-1"
                                 type="button"
                             >
-                                <ImageIcon size={20} className="group-hover:text-gray-300 transition-colors"/>
-                                <span className="text-[9px] uppercase font-bold group-hover:text-gray-300 transition-colors text-center leading-none mt-1">Select / Drop</span>
+                                <ImageIcon size={18} className="group-hover:text-gray-300 transition-colors"/>
+                                <span className="text-[9px] uppercase font-bold group-hover:text-gray-300 transition-colors text-center leading-none mt-0.5">Upload</span>
                             </button>
-                            <div className="w-[1px] h-10 bg-gray-700/60" />
+
+                            {assets && assets.length > 0 && (
+                              <>
+                                <div className="w-[1px] h-8 bg-gray-700/60" />
+                                <button 
+                                    onClick={() => setShowAssetSelector(true)}
+                                    className="flex-1 h-full flex flex-col items-center justify-center hover:bg-blue-950/30 text-blue-400 hover:text-blue-300 rounded transition gap-1"
+                                    type="button"
+                                >
+                                    <FolderOpen size={18}/>
+                                    <span className="text-[9px] uppercase font-bold text-center leading-none mt-0.5">Bibliothek</span>
+                                </button>
+                              </>
+                            )}
+
+                            <div className="w-[1px] h-8 bg-gray-700/60" />
                             <button 
                                 onClick={handleOpenAiModal}
                                 className="flex-1 h-full flex flex-col items-center justify-center hover:bg-purple-950/20 text-purple-400 hover:text-purple-300 rounded transition gap-1"
                                 type="button"
                             >
-                                <Sparkles size={20} className="animate-pulse text-purple-500"/>
-                                <span className="text-[9px] uppercase font-bold text-center leading-none mt-1">KI Generieren</span>
+                                <Sparkles size={18} className="animate-pulse text-purple-500"/>
+                                <span className="text-[9px] uppercase font-bold text-center leading-none mt-0.5">KI Gen</span>
                             </button>
                         </>
                     )}
                 </div>
+            )}
+
+            {/* Asset Selector Modal */}
+            {showAssetSelector && assets && (
+              <AssetSelectorModal
+                assets={assets}
+                onSelect={(asset) => {
+                  if (asset.fileUrl) {
+                    onChange(asset.fileUrl);
+                  }
+                }}
+                onClose={() => setShowAssetSelector(false)}
+              />
             )}
 
             {/* KI Generierungs-Modal */}
@@ -451,29 +489,222 @@ const AudioField: React.FC<AudioFieldProps> = ({ label, value, onChange }) => {
 
 interface ChapterEditorProps {
     chapter: Chapter;
+    allScenes: Scene[];
+    allChapters: Chapter[];
+    allMaps: WorldMap[];
     onChange: (u: Partial<Chapter>) => void;
     onDelete: () => void;
+    onNavigateToScene: (sceneId: string) => void;
+    onCreateSceneForChapter: (chapterId: string) => void;
+    onUpdateScenes: (scenes: Scene[]) => void;
+    onReorderChapter: (direction: 'up' | 'down') => void;
 }
 
-const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapter, onChange, onDelete }) => {
+const ChapterEditor: React.FC<ChapterEditorProps> = ({
+    chapter,
+    allScenes,
+    allChapters,
+    allMaps,
+    onChange,
+    onDelete,
+    onNavigateToScene,
+    onCreateSceneForChapter,
+    onUpdateScenes,
+    onReorderChapter
+}) => {
+    // Mapped scenes sorted chronologically
+    const mappedScenes = allScenes
+        .filter(s => s.chapterId === chapter.id)
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+    const handleMoveScene = (sceneId: string, direction: 'up' | 'down') => {
+        const index = mappedScenes.findIndex(s => s.id === sceneId);
+        if (index === -1) return;
+        const targetIndex = direction === 'up' ? index - 1 : index + 1;
+        if (targetIndex < 0 || targetIndex >= mappedScenes.length) return;
+
+        const updatedMapped = [...mappedScenes];
+        const [moved] = updatedMapped.splice(index, 1);
+        updatedMapped.splice(targetIndex, 0, moved);
+
+        // Reassign order numbers strictly 1, 2, 3...
+        const updatedScenes = allScenes.map(s => {
+            if (s.chapterId !== chapter.id) return s;
+            const newIndex = updatedMapped.findIndex(m => m.id === s.id);
+            return { ...s, order: newIndex + 1 };
+        });
+
+        onUpdateScenes(updatedScenes);
+    };
+
+    const handleToggleSceneMain = (sceneId: string) => {
+        const updatedScenes = allScenes.map(s => {
+            if (s.id === sceneId) {
+                return { ...s, isMainScene: s.isMainScene === false ? true : false };
+            }
+            return s;
+        });
+        onUpdateScenes(updatedScenes);
+    };
+
     return (
-        <div className="space-y-6 max-w-2xl bg-gray-900/50 p-6 rounded-xl border border-gray-800">
+        <div className="space-y-6 max-w-3xl bg-gray-900/50 p-6 rounded-xl border border-gray-800">
             <div className="flex justify-between items-start">
                 <div>
-                     <h3 className="text-xl font-bold text-white">{chapter.name || 'Unnamed Chapter'}</h3>
-                     <div className="text-xs text-gray-500">ID: {chapter.id}</div>
+                    <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-0.5 text-xs font-bold bg-emerald-900/80 text-emerald-300 rounded border border-emerald-700">
+                            Kapitel #{chapter.order ?? 1}
+                        </span>
+                        <h3 className="text-xl font-bold text-white">{chapter.name || 'Unnamed Chapter'}</h3>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">ID: {chapter.id}</div>
                 </div>
-                <button onClick={onDelete} className="text-red-500 hover:text-red-400 bg-red-900/20 p-2 rounded"><Trash size={18}/></button>
+                <div className="flex items-center gap-2">
+                    <Button 
+                        variant="secondary" 
+                        className="text-xs py-1 px-2 flex items-center gap-1" 
+                        onClick={() => onReorderChapter('up')}
+                        title="Kapitel nach oben verschieben"
+                    >
+                        <ChevronUp size={14} /> Oben
+                    </Button>
+                    <Button 
+                        variant="secondary" 
+                        className="text-xs py-1 px-2 flex items-center gap-1" 
+                        onClick={() => onReorderChapter('down')}
+                        title="Kapitel nach unten verschieben"
+                    >
+                        <ChevronDown size={14} /> Unten
+                    </Button>
+                    <button onClick={onDelete} className="text-red-500 hover:text-red-400 bg-red-900/20 p-2 rounded">
+                        <Trash size={18}/>
+                    </button>
+                </div>
             </div>
             
-            <div>
-                <label className="text-xs font-bold text-gray-500 uppercase">Chapter Name</label>
-                <input className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white" value={chapter.name} onChange={e => onChange({ name: e.target.value })} />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="md:col-span-2">
+                    <label className="text-xs font-bold text-gray-500 uppercase">Chapter Name</label>
+                    <input className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white" value={chapter.name} onChange={e => onChange({ name: e.target.value })} />
+                </div>
+                <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase">Reihenfolge (Order)</label>
+                    <input 
+                        type="number" 
+                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white" 
+                        value={chapter.order ?? 1} 
+                        onChange={e => onChange({ order: parseInt(e.target.value) || 1 })} 
+                    />
+                </div>
             </div>
 
             <div>
                 <label className="text-xs font-bold text-gray-500 uppercase">Description / Lore</label>
-                <textarea className="w-full bg-gray-800 border border-gray-700 rounded p-2 h-24 text-white" value={chapter.description} onChange={e => onChange({ description: e.target.value })} />
+                <textarea className="w-full bg-gray-800 border border-gray-700 rounded p-2 h-20 text-white" value={chapter.description} onChange={e => onChange({ description: e.target.value })} />
+            </div>
+
+            {/* MAPPED SCENES SECTION */}
+            <div className="border-t border-gray-800 pt-6 space-y-4">
+                <div className="flex justify-between items-center">
+                    <div>
+                        <h4 className="text-lg font-bold text-emerald-400 flex items-center gap-2">
+                            <MapPin size={18} /> Zugeordnete Szenen ({mappedScenes.length})
+                        </h4>
+                        <p className="text-xs text-gray-400">
+                            Chronologische Szenenabfolge in diesem Kapitel. Klicke auf eine Szene, um sie im Editor zu öffnen.
+                        </p>
+                    </div>
+                    <Button 
+                        onClick={() => onCreateSceneForChapter(chapter.id)} 
+                        className="text-xs py-1.5 px-3 bg-emerald-600 hover:bg-emerald-500 flex items-center gap-1"
+                    >
+                        <Plus size={14} /> Szene hinzufügen
+                    </Button>
+                </div>
+
+                {mappedScenes.length === 0 ? (
+                    <div className="bg-gray-800/40 border border-dashed border-gray-700 rounded-xl p-6 text-center text-gray-500 text-sm">
+                        Keine Szenen diesem Kapitel zugewiesen. Klicke auf "+ Szene hinzufügen", um eine neue Szene für "{chapter.name}" zu erstellen.
+                    </div>
+                ) : (
+                    <div className="space-y-2.5">
+                        {mappedScenes.map((s, idx) => {
+                            const isMain = s.isMainScene !== false;
+                            const assignedMap = allMaps.find(m => m.id === s.mapId) || allMaps.find(m => m.spots?.some(spot => spot.type === 'scene' && spot.sceneId === s.id));
+                            return (
+                                <div 
+                                    key={s.id} 
+                                    className="bg-gray-800/90 hover:bg-gray-800 border border-gray-700 hover:border-gray-600 rounded-lg p-3 flex flex-wrap md:flex-nowrap items-center justify-between gap-3 transition-colors"
+                                >
+                                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                                        <div className="flex flex-col items-center justify-center bg-gray-900 border border-gray-700 rounded px-2 py-1 text-center flex-shrink-0 min-w-[36px]">
+                                            <span className="text-[9px] text-gray-500 font-mono uppercase">Pos</span>
+                                            <span className="text-sm font-bold text-emerald-400">{s.order || idx + 1}</span>
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="font-bold text-white text-sm truncate">{s.name}</span>
+                                                {isMain ? (
+                                                    <span className="text-[10px] bg-emerald-900/80 text-emerald-300 border border-emerald-700 px-2 py-0.5 rounded font-medium flex-shrink-0">
+                                                        ★ Hauptszene
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[10px] bg-amber-900/80 text-amber-300 border border-amber-700 px-2 py-0.5 rounded font-medium flex-shrink-0">
+                                                        ✦ Nebenszene
+                                                    </span>
+                                                )}
+                                                {assignedMap ? (
+                                                    <span className="text-[10px] bg-sky-900/80 text-sky-300 border border-sky-700 px-2 py-0.5 rounded font-medium flex items-center gap-1 flex-shrink-0" title={`Gezielt auf Karte '${assignedMap.name}' gemappt`}>
+                                                        <MapIcon size={10} /> Karte: {assignedMap.name}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[10px] bg-gray-900 text-gray-500 border border-gray-700 px-2 py-0.5 rounded font-medium flex items-center gap-1 flex-shrink-0">
+                                                        <MapIcon size={10} /> Keine Karte
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="text-xs text-gray-400 truncate mt-0.5">
+                                                {s.goal ? `Ziel: ${s.goal}` : s.description || 'Keine Beschreibung'}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-1.5 flex-shrink-0 w-full md:w-auto justify-end border-t md:border-t-0 pt-2 md:pt-0 border-gray-700/50">
+                                        <button 
+                                            onClick={() => handleMoveScene(s.id, 'up')}
+                                            disabled={idx === 0}
+                                            className="p-1.5 bg-gray-900 hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-gray-900 rounded text-gray-300 border border-gray-700"
+                                            title="Nach oben verschieben"
+                                        >
+                                            <ChevronUp size={14} />
+                                        </button>
+                                        <button 
+                                            onClick={() => handleMoveScene(s.id, 'down')}
+                                            disabled={idx === mappedScenes.length - 1}
+                                            className="p-1.5 bg-gray-900 hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-gray-900 rounded text-gray-300 border border-gray-700"
+                                            title="Nach unten verschieben"
+                                        >
+                                            <ChevronDown size={14} />
+                                        </button>
+                                        <button 
+                                            onClick={() => handleToggleSceneMain(s.id)}
+                                            className="px-2 py-1 text-xs bg-gray-900 hover:bg-gray-700 rounded text-gray-300 border border-gray-700"
+                                            title="Typ wechseln (Hauptszene / Nebenszene)"
+                                        >
+                                            {isMain ? '✦ Als Nebenszene' : '★ Als Hauptszene'}
+                                        </button>
+                                        <Button 
+                                            onClick={() => onNavigateToScene(s.id)}
+                                            className="text-xs py-1 px-2.5 bg-emerald-600 hover:bg-emerald-500 flex items-center gap-1"
+                                        >
+                                            Bearbeiten <ExternalLink size={12} />
+                                        </Button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -481,11 +712,14 @@ const ChapterEditor: React.FC<ChapterEditorProps> = ({ chapter, onChange, onDele
 
 interface CharacterEditorProps {
   character: Character;
+  assets?: AssetItem[];
   onChange: (u: Partial<Character>) => void;
   onDelete: () => void;
 }
 
-const CharacterEditor: React.FC<CharacterEditorProps> = ({ character, onChange, onDelete }) => {
+const CharacterEditor: React.FC<CharacterEditorProps> = ({ character, assets, onChange, onDelete }) => {
+    const charGroup = getCharacterGroup(character);
+
     // Helper for arrays (sprites)
     const updateSpriteArray = (arrName: 'woozySprites' | 'finishAnimation', index: number, val: string | null) => {
         const arr = character[arrName] ? [...character[arrName]!] : [];
@@ -504,10 +738,15 @@ const CharacterEditor: React.FC<CharacterEditorProps> = ({ character, onChange, 
         <div className="space-y-6 max-w-2xl bg-gray-900/50 p-6 rounded-xl border border-gray-800">
             <div className="flex justify-between items-start">
                 <div>
-                     <h3 className="text-xl font-bold text-white">{character.name}</h3>
-                     <div className="text-xs text-gray-500">ID: {character.id}</div>
+                     <div className="flex items-center gap-2 flex-wrap">
+                       <h3 className="text-xl font-bold text-white">{character.name}</h3>
+                       <span className={`text-xs px-2.5 py-0.5 rounded border ${charGroup.badgeBg} ${charGroup.badgeBorder} ${charGroup.textColor} font-semibold flex items-center gap-1.5 shadow-sm`}>
+                         <span>{charGroup.icon}</span> {charGroup.label}
+                       </span>
+                     </div>
+                     <div className="text-xs text-gray-500 mt-1">ID: {character.id}</div>
                 </div>
-                <button onClick={onDelete} className="text-red-500 hover:text-red-400 bg-red-900/20 p-2 rounded"><Trash size={18}/></button>
+                <button onClick={onDelete} className="text-red-500 hover:text-red-400 bg-red-900/20 p-2 rounded" title="Charakter löschen"><Trash size={18}/></button>
             </div>
             
             <div className="grid grid-cols-2 gap-4">
@@ -521,6 +760,33 @@ const CharacterEditor: React.FC<CharacterEditorProps> = ({ character, onChange, 
                         <input type="color" className="h-10 w-10 bg-gray-800 border border-gray-700 rounded cursor-pointer" value={character.rpgColor} onChange={e => onChange({ rpgColor: e.target.value })} />
                         <input className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white" value={character.rpgColor} onChange={e => onChange({ rpgColor: e.target.value })} />
                     </div>
+                </div>
+            </div>
+
+            {/* Structure & Categorization */}
+            <div className="grid grid-cols-2 gap-4 bg-gray-950/80 p-3.5 rounded-xl border border-gray-800">
+                <div>
+                    <label className="text-xs font-bold text-gray-400 uppercase block mb-1">Rolle / Bedeutung</label>
+                    <select
+                        value={character.importance || 'main'}
+                        onChange={e => onChange({ importance: e.target.value as CharacterImportance })}
+                        className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white text-xs outline-none focus:border-emerald-500"
+                    >
+                        <option value="main">🌟 Hauptcharakter</option>
+                        <option value="side">🛡️ Nebencharakter</option>
+                    </select>
+                </div>
+                <div>
+                    <label className="text-xs font-bold text-gray-400 uppercase block mb-1">Gesinnung</label>
+                    <select
+                        value={character.alignment || 'gut'}
+                        onChange={e => onChange({ alignment: e.target.value as CharacterAlignment })}
+                        className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white text-xs outline-none focus:border-emerald-500"
+                    >
+                        <option value="gut">🟢 Gut / Verbündeter</option>
+                        <option value="boese">🔴 Böse / Antagonist</option>
+                        <option value="neutral">⚪ Neutral / Sonstige</option>
+                    </select>
                 </div>
             </div>
 
@@ -554,12 +820,14 @@ const CharacterEditor: React.FC<CharacterEditorProps> = ({ character, onChange, 
                     label="Portrait (Idle/Standard)" 
                     value={character.imageSrc} 
                     onChange={val => onChange({ imageSrc: val })} 
+                    assets={assets}
                     defaultPrompt={`${character.name}, standard portrait, ${character.defaultDescription || ''}, anime visual novel style, high quality, standalone character sprite, white background`}
                 />
                 <ImageField 
                     label="Map Sprite (Small)" 
                     value={character.mapSpriteSrc} 
                     onChange={val => onChange({ mapSpriteSrc: val })} 
+                    assets={assets}
                     defaultPrompt={`${character.name}, mini chibi sprite, ${character.defaultDescription || ''}, transparent background, 2d game sprite, high quality`}
                 />
             </div>
@@ -571,48 +839,56 @@ const CharacterEditor: React.FC<CharacterEditorProps> = ({ character, onChange, 
                         label="Happy" 
                         value={character.emotions?.happy || null} 
                         onChange={val => onChange({ emotions: { ...character.emotions, happy: val } })} 
+                        assets={assets}
                         defaultPrompt={`${character.name}, happy expression, smile, ${character.defaultDescription || ''}, anime visual novel style, high quality, white background`}
                     />
                     <ImageField 
                         label="Angry" 
                         value={character.emotions?.angry || null} 
                         onChange={val => onChange({ emotions: { ...character.emotions, angry: val } })} 
+                        assets={assets}
                         defaultPrompt={`${character.name}, angry expression, scowling, ${character.defaultDescription || ''}, anime visual novel style, high quality, white background`}
                     />
                     <ImageField 
                         label="Thoughtful" 
                         value={character.emotions?.thoughtful || null} 
                         onChange={val => onChange({ emotions: { ...character.emotions, thoughtful: val } })} 
+                        assets={assets}
                         defaultPrompt={`${character.name}, thoughtful expression, hand on chin, ${character.defaultDescription || ''}, anime visual novel style, high quality, white background`}
                     />
                     <ImageField 
                         label="Shy" 
                         value={character.emotions?.shy || null} 
                         onChange={val => onChange({ emotions: { ...character.emotions, shy: val } })} 
+                        assets={assets}
                         defaultPrompt={`${character.name}, shy expression, blushing, slight smile, ${character.defaultDescription || ''}, anime visual novel style, high quality, white background`}
                     />
                     <ImageField 
                         label="Sad" 
                         value={character.emotions?.sad || null} 
                         onChange={val => onChange({ emotions: { ...character.emotions, sad: val } })} 
+                        assets={assets}
                         defaultPrompt={`${character.name}, sad expression, tearing up, looking down, ${character.defaultDescription || ''}, anime visual novel style, high quality, white background`}
                     />
                     <ImageField 
                         label="Shocked" 
                         value={character.emotions?.shocked || null} 
                         onChange={val => onChange({ emotions: { ...character.emotions, shocked: val } })} 
+                        assets={assets}
                         defaultPrompt={`${character.name}, shocked expression, wide eyes, open mouth, ${character.defaultDescription || ''}, anime visual novel style, high quality, white background`}
                     />
                     <ImageField 
                         label="Worried" 
                         value={character.emotions?.worried || null} 
                         onChange={val => onChange({ emotions: { ...character.emotions, worried: val } })} 
+                        assets={assets}
                         defaultPrompt={`${character.name}, worried expression, sweat drop, anxious, ${character.defaultDescription || ''}, anime visual novel style, high quality, white background`}
                     />
                     <ImageField 
                         label="Lustful" 
                         value={character.emotions?.lustful || null} 
                         onChange={val => onChange({ emotions: { ...character.emotions, lustful: val } })} 
+                        assets={assets}
                         defaultPrompt={`${character.name}, starry romantic eyes, slight blush, happy smile, ${character.defaultDescription || ''}, anime visual novel style, high quality, white background`}
                     />
                 </div>
@@ -887,11 +1163,12 @@ interface SceneEditorProps {
     characters: Character[];
     chapters: Chapter[];
     worldInfo: WorldInfo;
+    assets?: AssetItem[];
     onChange: (u: Partial<Scene>) => void;
     onDelete: () => void;
 }
 
-const SceneEditor: React.FC<SceneEditorProps> = ({ scene, allScenes, allBattles, allMaps, characters, chapters, worldInfo, onChange, onDelete }) => {
+const SceneEditor: React.FC<SceneEditorProps> = ({ scene, allScenes, allBattles, allMaps, characters, chapters, worldInfo, assets, onChange, onDelete }) => {
     const toggleEffect = (type: 'scene' | 'transition' | 'battle', targetId: string, action: 'unlock' | 'lock') => {
         const effects = scene.effects ? [...scene.effects] : [];
         const index = effects.findIndex(e => e.type === type && e.targetId === targetId);
@@ -918,17 +1195,68 @@ const SceneEditor: React.FC<SceneEditorProps> = ({ scene, allScenes, allBattles,
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                  <div>
                     <label className="text-xs font-bold text-gray-500 uppercase">Scene Name</label>
                     <input className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white" value={scene.name} onChange={e => onChange({ name: e.target.value })} />
                  </div>
                  <div>
-                    <label className="text-xs font-bold text-gray-500 uppercase">Chapter</label>
+                    <label className="text-xs font-bold text-gray-500 uppercase">Chapter / Kapitel</label>
                     <select className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white" value={scene.chapterId || ''} onChange={e => onChange({ chapterId: e.target.value })}>
-                        {chapters.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        {chapters.map((c) => <option key={c.id} value={c.id}>{c.name || 'Unnamed Chapter'}</option>)}
                     </select>
                  </div>
+                 <div>
+                    <label className="text-xs font-bold text-sky-400 uppercase flex items-center gap-1">
+                        <MapIcon size={12}/> World Map / Karte
+                    </label>
+                    <select 
+                        className="w-full bg-gray-800 border border-sky-800/80 focus:border-sky-500 rounded p-2 text-white text-xs" 
+                        value={scene.mapId !== undefined ? scene.mapId : (allMaps.find(m => m.spots?.some(spot => spot.type === 'scene' && spot.sceneId === scene.id))?.id || '')} 
+                        onChange={e => onChange({ mapId: e.target.value || undefined })}
+                    >
+                        <option value="">-- Keine Karte zugewiesen --</option>
+                        {allMaps.map((m) => {
+                            const hasSpot = m.spots?.some(s => s.type === 'scene' && s.sceneId === scene.id);
+                            return (
+                                <option key={m.id} value={m.id}>
+                                    {m.name || 'Unbenannte Karte'} {hasSpot ? '(auf Map platziert)' : ''}
+                                </option>
+                            );
+                        })}
+                    </select>
+                 </div>
+                 <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase">Reihenfolge (Order)</label>
+                    <input 
+                        type="number" 
+                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white" 
+                        value={scene.order ?? 1} 
+                        onChange={e => onChange({ order: parseInt(e.target.value) || 1 })} 
+                    />
+                 </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4 bg-gray-800/60 p-3 rounded-lg border border-gray-700">
+                <span className="text-xs font-bold text-gray-300">Szenen-Typ / Relevanz:</span>
+                <label className="flex items-center gap-2 text-xs text-emerald-300 cursor-pointer">
+                    <input 
+                        type="radio" 
+                        name={`sceneType_${scene.id}`} 
+                        checked={scene.isMainScene !== false} 
+                        onChange={() => onChange({ isMainScene: true })} 
+                    />
+                    ★ Hauptszene (Story-relevant)
+                </label>
+                <label className="flex items-center gap-2 text-xs text-amber-300 cursor-pointer">
+                    <input 
+                        type="radio" 
+                        name={`sceneType_${scene.id}`} 
+                        checked={scene.isMainScene === false} 
+                        onChange={() => onChange({ isMainScene: false })} 
+                    />
+                    ✦ Nebenszene (Optional / Side Quest)
+                </label>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -936,6 +1264,7 @@ const SceneEditor: React.FC<SceneEditorProps> = ({ scene, allScenes, allBattles,
                     label="Background Image" 
                     value={scene.backgroundSrc} 
                     onChange={val => onChange({ backgroundSrc: val })} 
+                    assets={assets}
                     defaultPrompt={`${scene.name}, ${scene.description || ''}, ${scene.sensoryDetails || ''}, anime visual novel scenery background illustration, beautiful digital painting, colorful, high resolution`}
                 />
                 <VideoField label="Intro Video (Optional)" value={scene.introVideoSrc || null} onChange={val => onChange({ introVideoSrc: val })} />
@@ -991,33 +1320,44 @@ const SceneEditor: React.FC<SceneEditorProps> = ({ scene, allScenes, allBattles,
 
             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
                 <label className="flex items-center gap-2 text-sm font-bold text-emerald-400 mb-4"><Users size={18} /> CHARACTERS & ROLES</label>
-                <div className="space-y-2">
-                    {characters.map((c) => {
-                        const inScene = scene.characters.find((sc) => sc.characterId === c.id);
+                <div className="space-y-4">
+                    {CHARACTER_GROUPS.map(group => {
+                        const groupChars = characters.filter(c => getCharacterGroupKey(c) === group.id);
+                        if (groupChars.length === 0) return null;
                         return (
-                            <div key={c.id} className={`flex items-center gap-3 p-2 rounded border ${inScene ? 'bg-emerald-900/30 border-emerald-500' : 'bg-gray-900 border-gray-700 opacity-60'}`}>
-                                <input 
-                                    type="checkbox" 
-                                    checked={!!inScene} 
-                                    onChange={(e) => {
-                                        if (e.target.checked) {
-                                            onChange({ characters: [...scene.characters, { characterId: c.id, roleInScene: 'Default' }] });
-                                        } else {
-                                            onChange({ characters: scene.characters.filter((sc) => sc.characterId !== c.id) });
-                                        }
-                                    }}
-                                />
-                                <div className="w-24 font-bold truncate text-white">{c.name}</div>
-                                <input 
-                                    className="flex-1 bg-transparent border-b border-gray-600 text-xs focus:border-emerald-500 outline-none text-white" 
-                                    placeholder="Role in this scene..."
-                                    disabled={!inScene}
-                                    value={inScene?.roleInScene || ''}
-                                    onChange={(e) => {
-                                        const newChars = scene.characters.map((sc) => sc.characterId === c.id ? { ...sc, roleInScene: e.target.value } : sc);
-                                        onChange({ characters: newChars });
-                                    }}
-                                />
+                            <div key={group.id} className="space-y-1.5">
+                                <div className="text-xs font-bold text-gray-400 flex items-center gap-1.5 pb-1 border-b border-gray-700/60">
+                                    <span>{group.icon}</span> <span>{group.label}</span>
+                                </div>
+                                {groupChars.map(c => {
+                                    const inScene = scene.characters.find((sc) => sc.characterId === c.id);
+                                    return (
+                                        <div key={c.id} className={`flex items-center gap-3 p-2 rounded border ${inScene ? 'bg-emerald-900/30 border-emerald-500' : 'bg-gray-900 border-gray-700 opacity-60'}`}>
+                                            <input 
+                                                type="checkbox" 
+                                                checked={!!inScene} 
+                                                onChange={(e) => {
+                                                    if (e.target.checked) {
+                                                        onChange({ characters: [...scene.characters, { characterId: c.id, roleInScene: 'Default' }] });
+                                                    } else {
+                                                        onChange({ characters: scene.characters.filter((sc) => sc.characterId !== c.id) });
+                                                    }
+                                                }}
+                                            />
+                                            <div className="w-28 font-bold truncate text-white text-xs">{c.name}</div>
+                                            <input 
+                                                className="flex-1 bg-transparent border-b border-gray-600 text-xs focus:border-emerald-500 outline-none text-white" 
+                                                placeholder="Role in this scene..."
+                                                disabled={!inScene}
+                                                value={inScene?.roleInScene || ''}
+                                                onChange={(e) => {
+                                                    const newChars = scene.characters.map((sc) => sc.characterId === c.id ? { ...sc, roleInScene: e.target.value } : sc);
+                                                    onChange({ characters: newChars });
+                                                }}
+                                            />
+                                        </div>
+                                    );
+                                })}
                             </div>
                         );
                     })}
@@ -1196,28 +1536,102 @@ interface MapEditorProps {
     characters: Character[];
     battles: Battle[];
     allMaps: WorldMap[];
+    assets?: AssetItem[];
     onChange: (u: Partial<WorldMap>) => void;
     onDelete: () => void;
 }
 
-const MapEditor: React.FC<MapEditorProps> = ({ map, scenes, characters, battles, allMaps, onChange, onDelete }) => {
+const MapEditor: React.FC<MapEditorProps> = ({ map, scenes, characters, battles, allMaps, assets, onChange, onDelete }) => {
+    const [selectedSpotId, setSelectedSpotId] = useState<string | null>(null);
+    const [draggingSpotId, setDraggingSpotId] = useState<string | null>(null);
+    const mapContainerRef = useRef<HTMLDivElement>(null);
+    const isDraggingRef = useRef(false);
+    const startMousePosRef = useRef<{ x: number; y: number } | null>(null);
+
     // Helper to update spots
     const updateSpot = (id: string, u: Partial<MapSpot>) => {
         onChange({ spots: map.spots.map(s => s.id === id ? { ...s, ...u } : s) });
     };
 
-    const addSpot = (e: React.MouseEvent<HTMLDivElement>) => {
-        // Calculate relative position %
+    const handleSpotMouseDown = (e: React.MouseEvent, spot: MapSpot) => {
+        e.stopPropagation();
+        e.preventDefault();
+        setDraggingSpotId(spot.id);
+        setSelectedSpotId(spot.id);
+        isDraggingRef.current = false;
+        startMousePosRef.current = { x: e.clientX, y: e.clientY };
+
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+            if (!mapContainerRef.current || !startMousePosRef.current) return;
+
+            const dx = moveEvent.clientX - startMousePosRef.current.x;
+            const dy = moveEvent.clientY - startMousePosRef.current.y;
+
+            if (Math.hypot(dx, dy) > 4) {
+                isDraggingRef.current = true;
+            }
+
+            if (isDraggingRef.current) {
+                const rect = mapContainerRef.current.getBoundingClientRect();
+                const newX = Math.max(1, Math.min(99, ((moveEvent.clientX - rect.left) / rect.width) * 100));
+                const newY = Math.max(1, Math.min(99, ((moveEvent.clientY - rect.top) / rect.height) * 100));
+                
+                updateSpot(spot.id, { 
+                    x: Math.round(newX * 10) / 10, 
+                    y: Math.round(newY * 10) / 10 
+                });
+            }
+        };
+
+        const handleMouseUp = () => {
+            setDraggingSpotId(null);
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+    };
+
+    const handleCanvasContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+
         const rect = e.currentTarget.getBoundingClientRect();
-        const x = ((e.clientX - rect.left) / rect.width) * 100;
-        const y = ((e.clientY - rect.top) / rect.height) * 100;
-        
+        const x = Math.round((((e.clientX - rect.left) / rect.width) * 100) * 10) / 10;
+        const y = Math.round((((e.clientY - rect.top) / rect.height) * 100) * 10) / 10;
+
         const newSpot: MapSpot = {
             id: crypto.randomUUID(),
             x, y,
             type: 'scene'
         };
         onChange({ spots: [...map.spots, newSpot] });
+        setSelectedSpotId(newSpot.id);
+    };
+
+    const handleCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (isDraggingRef.current) {
+            isDraggingRef.current = false;
+            return;
+        }
+        // Left clicking empty space deselects spot
+        setSelectedSpotId(null);
+    };
+
+    const selectedSpot = map.spots.find(s => s.id === selectedSpotId);
+
+    // Calculate smart popup placement to prevent screen boundary overflowing
+    const getPopupStyle = (spot: MapSpot) => {
+        const isRightHalf = spot.x > 50;
+        const isBottomHalf = spot.y > 50;
+
+        return {
+            left: isRightHalf ? 'auto' : `${Math.min(spot.x, 60)}%`,
+            right: isRightHalf ? `${Math.min(100 - spot.x, 60)}%` : 'auto',
+            top: isBottomHalf ? 'auto' : `${Math.min(spot.y, 50)}%`,
+            bottom: isBottomHalf ? `${Math.min(100 - spot.y, 50)}%` : 'auto',
+        };
     };
 
     return (
@@ -1236,89 +1650,272 @@ const MapEditor: React.FC<MapEditorProps> = ({ map, scenes, characters, battles,
                 label="Map Image" 
                 value={map.backgroundSrc} 
                 onChange={val => onChange({ backgroundSrc: val })} 
+                assets={assets}
                 defaultPrompt={`${map.name}, gorgeous fantasy top-down map, regional layout map design, rpg game map, hand-drawn digital painting, clean vector shapes, highly detailed`}
             />
 
             <AudioField label="Background Music (Loop)" value={map.bgmUrl || null} onChange={val => onChange({ bgmUrl: val || undefined })} />
 
-            <div className="relative w-full aspect-video bg-gray-800 border border-gray-600 rounded overflow-hidden cursor-crosshair group">
-                {map.backgroundSrc ? (
-                    <AsyncImage src={map.backgroundSrc} className="w-full h-full object-cover opacity-50 group-hover:opacity-100 transition-opacity" />
-                ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-500">Click to add spots</div>
-                )}
-                {/* Click handler overlay */}
-                <div className="absolute inset-0 z-10" onClick={addSpot}></div>
-                
-                {/* Render Spots */}
-                {map.spots.map(spot => (
-                    <div 
-                        key={spot.id} 
-                        className="absolute w-6 h-6 -ml-3 -mt-3 bg-emerald-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center text-xs font-bold z-20 pointer-events-none"
-                        style={{ left: `${spot.x}%`, top: `${spot.y}%` }}
-                    >
-                        {spot.type[0].toUpperCase()}
-                    </div>
-                ))}
+            <div>
+                <div className="flex justify-between items-center mb-1.5">
+                    <label className="text-xs font-bold text-emerald-400 uppercase flex items-center gap-1">
+                        <MapPin size={14} /> Map Canvas & Spots
+                    </label>
+                    <span className="text-[11px] text-gray-400 italic">
+                        Rechtsklick: Spot erstellen | Linksklick: Auswählen | Drag & Drop: Verschieben
+                    </span>
+                </div>
+
+                <div 
+                    ref={mapContainerRef}
+                    className="relative w-full aspect-video bg-gray-800 border border-gray-600 rounded overflow-hidden cursor-crosshair group select-none"
+                    onClick={handleCanvasClick}
+                    onContextMenu={handleCanvasContextMenu}
+                >
+                    {map.backgroundSrc ? (
+                        <AsyncImage src={map.backgroundSrc} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity pointer-events-none" />
+                    ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-500 pointer-events-none">Rechtsklick auf die Karte um Spots hinzuzufügen</div>
+                    )}
+                    
+                    {/* Render Spots */}
+                    {map.spots.map(spot => {
+                        const isSelected = selectedSpotId === spot.id;
+                        const isDragging = draggingSpotId === spot.id;
+                        return (
+                            <div 
+                                key={spot.id} 
+                                onMouseDown={(e) => handleSpotMouseDown(e, spot)}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedSpotId(spot.id);
+                                }}
+                                onContextMenu={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setSelectedSpotId(spot.id);
+                                }}
+                                className={`absolute w-7 h-7 -ml-3.5 -mt-3.5 rounded-full border-2 shadow-xl flex items-center justify-center text-xs font-bold z-20 cursor-grab active:cursor-grabbing transition-transform select-none ${
+                                    isSelected 
+                                        ? 'bg-amber-400 text-black border-white scale-125 ring-4 ring-amber-400/50 z-30' 
+                                        : isDragging
+                                            ? 'bg-sky-400 text-black border-white scale-125 shadow-2xl z-30'
+                                            : 'bg-emerald-500 text-white border-white hover:scale-110 hover:bg-emerald-400'
+                                }`}
+                                style={{ left: `${spot.x}%`, top: `${spot.y}%` }}
+                                title={`Spot: ${spot.type.toUpperCase()} (${Math.round(spot.x)}%, ${Math.round(spot.y)}%) - Klicken zum Bearbeiten, Ziehen zum Verschieben`}
+                            >
+                                {spot.type[0].toUpperCase()}
+                            </div>
+                        );
+                    })}
+
+                    {/* Pop-up Inspector for Selected Spot */}
+                    {selectedSpot && (
+                        <div 
+                            className="absolute z-40 w-72 bg-gray-900/95 border border-amber-500/80 rounded-xl p-3.5 shadow-2xl backdrop-blur-md text-xs space-y-2.5 pointer-events-auto max-h-[90%] overflow-y-auto animate-in fade-in zoom-in-95"
+                            style={getPopupStyle(selectedSpot)}
+                            onClick={e => e.stopPropagation()}
+                            onMouseDown={e => e.stopPropagation()}
+                        >
+                            <div className="flex justify-between items-center border-b border-gray-700/80 pb-1.5">
+                                <div className="flex items-center gap-1.5 text-amber-400 font-bold text-xs">
+                                    <MapPin size={14} />
+                                    <span>Spot Bearbeiten</span>
+                                    <span className="text-[10px] text-gray-400 font-normal">({Math.round(selectedSpot.x)}%, {Math.round(selectedSpot.y)}%)</span>
+                                </div>
+                                <button 
+                                    onClick={() => setSelectedSpotId(null)}
+                                    className="text-gray-400 hover:text-white p-0.5 rounded hover:bg-gray-800 transition-colors"
+                                    title="Schließen"
+                                >
+                                    <X size={14} />
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase">Typ</label>
+                                    <select 
+                                        className="w-full bg-gray-800 border border-gray-700 rounded p-1.5 text-xs text-white focus:border-amber-500 focus:outline-none"
+                                        value={selectedSpot.type}
+                                        onChange={e => updateSpot(selectedSpot.id, { type: e.target.value as any })}
+                                    >
+                                        <option value="scene">Scene</option>
+                                        <option value="character">Character</option>
+                                        <option value="battle">Battle</option>
+                                        <option value="transition">Transition</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase">Ziel (Target)</label>
+                                    <select 
+                                        className="w-full bg-gray-800 border border-gray-700 rounded p-1.5 text-xs text-white focus:border-amber-500 focus:outline-none"
+                                        value={selectedSpot.sceneId || selectedSpot.characterId || selectedSpot.battleId || selectedSpot.targetMapId || ''}
+                                        onChange={e => {
+                                            const val = e.target.value;
+                                            if (selectedSpot.type === 'scene') updateSpot(selectedSpot.id, { sceneId: val });
+                                            if (selectedSpot.type === 'character') updateSpot(selectedSpot.id, { characterId: val });
+                                            if (selectedSpot.type === 'battle') updateSpot(selectedSpot.id, { battleId: val });
+                                            if (selectedSpot.type === 'transition') updateSpot(selectedSpot.id, { targetMapId: val });
+                                        }}
+                                    >
+                                        <option value="">-- Auswählen --</option>
+                                        {selectedSpot.type === 'scene' && scenes.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                        {selectedSpot.type === 'character' && characters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                        {selectedSpot.type === 'battle' && battles.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                        {selectedSpot.type === 'transition' && allMaps.filter(m => m.id !== map.id).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-400 uppercase">Visual Override (Sprite)</label>
+                                <select 
+                                    className="w-full bg-gray-800 border border-gray-700 rounded p-1.5 text-xs text-white focus:border-amber-500 focus:outline-none"
+                                    value={selectedSpot.visualCharacterId || ''}
+                                    onChange={e => updateSpot(selectedSpot.id, { visualCharacterId: e.target.value || undefined })}
+                                >
+                                    <option value="">Standard Icon</option>
+                                    {characters.map(c => <option key={c.id} value={c.id}>{c.name} (Sprite)</option>)}
+                                </select>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 pt-1">
+                                <div>
+                                    <label className="text-[9px] text-gray-500 uppercase font-bold">X Position (%)</label>
+                                    <input 
+                                        type="number"
+                                        min="0"
+                                        max="100"
+                                        className="w-full bg-gray-800 border border-gray-700 rounded p-1 text-xs text-white"
+                                        value={selectedSpot.x}
+                                        onChange={e => updateSpot(selectedSpot.id, { x: Math.max(0, Math.min(100, Number(e.target.value))) })}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[9px] text-gray-500 uppercase font-bold">Y Position (%)</label>
+                                    <input 
+                                        type="number"
+                                        min="0"
+                                        max="100"
+                                        className="w-full bg-gray-800 border border-gray-700 rounded p-1 text-xs text-white"
+                                        value={selectedSpot.y}
+                                        onChange={e => updateSpot(selectedSpot.id, { y: Math.max(0, Math.min(100, Number(e.target.value))) })}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex justify-between items-center pt-2 border-t border-gray-800">
+                                <span className="text-[10px] text-gray-500 flex items-center gap-1">
+                                    <Move size={10} /> Ziehen zum Verschieben
+                                </span>
+                                <button 
+                                    onClick={() => {
+                                        onChange({ spots: map.spots.filter(s => s.id !== selectedSpot.id) });
+                                        setSelectedSpotId(null);
+                                    }}
+                                    className="text-red-400 hover:text-red-300 hover:bg-red-950/50 px-2 py-1 rounded text-xs flex items-center gap-1 transition-colors"
+                                >
+                                    <Trash size={12} />
+                                    <span>Löschen</span>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
 
             <div className="space-y-4">
-                <h4 className="font-bold text-gray-400 uppercase text-xs">Map Spots</h4>
-                {map.spots.map(spot => (
-                    <div key={spot.id} className="bg-gray-800 p-3 rounded border border-gray-700 space-y-2">
-                        <div className="flex justify-between items-center">
-                            <span className="font-mono text-xs text-gray-500">POS: {Math.round(spot.x)}%, {Math.round(spot.y)}%</span>
-                            <button onClick={() => onChange({ spots: map.spots.filter(s => s.id !== spot.id) })} className="text-red-500 hover:text-white"><Trash size={14}/></button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                             <div>
-                                 <label className="text-[10px] font-bold text-gray-500 uppercase">Type</label>
-                                 <select 
+                <h4 className="font-bold text-gray-400 uppercase text-xs flex items-center justify-between">
+                    <span>Map Spots ({map.spots.length})</span>
+                    {selectedSpotId && (
+                        <button 
+                            onClick={() => setSelectedSpotId(null)}
+                            className="text-[11px] text-amber-400 hover:underline font-normal"
+                        >
+                            Auswahl aufheben
+                        </button>
+                    )}
+                </h4>
+                {map.spots.map(spot => {
+                    const isSelected = selectedSpotId === spot.id;
+                    return (
+                        <div 
+                            key={spot.id} 
+                            onClick={() => setSelectedSpotId(spot.id)}
+                            className={`p-3 rounded border transition-all space-y-2 cursor-pointer ${
+                                isSelected 
+                                    ? 'bg-amber-950/30 border-amber-500 ring-1 ring-amber-500/50' 
+                                    : 'bg-gray-800 border-gray-700 hover:border-gray-600'
+                            }`}
+                        >
+                            <div className="flex justify-between items-center">
+                                <span className="font-mono text-xs text-amber-300 flex items-center gap-1 font-bold">
+                                    <MapPin size={12} /> POS: {Math.round(spot.x)}%, {Math.round(spot.y)}%
+                                </span>
+                                <button 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onChange({ spots: map.spots.filter(s => s.id !== spot.id) });
+                                        if (selectedSpotId === spot.id) setSelectedSpotId(null);
+                                    }} 
+                                    className="text-red-500 hover:text-white p-1 rounded hover:bg-red-950/50 transition-colors"
+                                    title="Spot löschen"
+                                >
+                                    <Trash size={14}/>
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                 <div>
+                                     <label className="text-[10px] font-bold text-gray-500 uppercase">Type</label>
+                                     <select 
+                                        className="w-full bg-gray-900 border border-gray-600 rounded p-1 text-xs text-white"
+                                        value={spot.type}
+                                        onChange={e => updateSpot(spot.id, { type: e.target.value as any })}
+                                     >
+                                         <option value="scene">Scene</option>
+                                         <option value="character">Character</option>
+                                         <option value="battle">Battle</option>
+                                         <option value="transition">Transition</option>
+                                     </select>
+                                 </div>
+                                 <div>
+                                     <label className="text-[10px] font-bold text-gray-500 uppercase">Target</label>
+                                     <select 
+                                        className="w-full bg-gray-900 border border-gray-600 rounded p-1 text-xs text-white"
+                                        value={spot.sceneId || spot.characterId || spot.battleId || spot.targetMapId || ''}
+                                        onChange={e => {
+                                            const val = e.target.value;
+                                            if (spot.type === 'scene') updateSpot(spot.id, { sceneId: val });
+                                            if (spot.type === 'character') updateSpot(spot.id, { characterId: val });
+                                            if (spot.type === 'battle') updateSpot(spot.id, { battleId: val });
+                                            if (spot.type === 'transition') updateSpot(spot.id, { targetMapId: val });
+                                        }}
+                                     >
+                                         <option value="">-- Select --</option>
+                                         {spot.type === 'scene' && scenes.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                         {spot.type === 'character' && characters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                         {spot.type === 'battle' && battles.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                         {spot.type === 'transition' && allMaps.filter(m => m.id !== map.id).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                     </select>
+                                 </div>
+                            </div>
+                            {/* Visual Override */}
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-500 uppercase">Visual Override (Optional)</label>
+                                <select 
                                     className="w-full bg-gray-900 border border-gray-600 rounded p-1 text-xs text-white"
-                                    value={spot.type}
-                                    onChange={e => updateSpot(spot.id, { type: e.target.value as any })}
-                                 >
-                                     <option value="scene">Scene</option>
-                                     <option value="character">Character</option>
-                                     <option value="battle">Battle</option>
-                                     <option value="transition">Transition</option>
-                                 </select>
-                             </div>
-                             <div>
-                                 <label className="text-[10px] font-bold text-gray-500 uppercase">Target</label>
-                                 <select 
-                                    className="w-full bg-gray-900 border border-gray-600 rounded p-1 text-xs text-white"
-                                    value={spot.sceneId || spot.characterId || spot.battleId || spot.targetMapId || ''}
-                                    onChange={e => {
-                                        const val = e.target.value;
-                                        if (spot.type === 'scene') updateSpot(spot.id, { sceneId: val });
-                                        if (spot.type === 'character') updateSpot(spot.id, { characterId: val });
-                                        if (spot.type === 'battle') updateSpot(spot.id, { battleId: val });
-                                        if (spot.type === 'transition') updateSpot(spot.id, { targetMapId: val });
-                                    }}
-                                 >
-                                     <option value="">-- Select --</option>
-                                     {spot.type === 'scene' && scenes.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                     {spot.type === 'character' && characters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                     {spot.type === 'battle' && battles.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                                     {spot.type === 'transition' && allMaps.filter(m => m.id !== map.id).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                                 </select>
-                             </div>
+                                    value={spot.visualCharacterId || ''}
+                                    onChange={e => updateSpot(spot.id, { visualCharacterId: e.target.value || undefined })}
+                                >
+                                    <option value="">Default Icon / Sprite</option>
+                                    {characters.map(c => <option key={c.id} value={c.id}>{c.name} (Sprite)</option>)}
+                                </select>
+                            </div>
                         </div>
-                        {/* Visual Override */}
-                        <div>
-                            <label className="text-[10px] font-bold text-gray-500 uppercase">Visual Override (Optional)</label>
-                            <select 
-                                className="w-full bg-gray-900 border border-gray-600 rounded p-1 text-xs text-white"
-                                value={spot.visualCharacterId || ''}
-                                onChange={e => updateSpot(spot.id, { visualCharacterId: e.target.value || undefined })}
-                            >
-                                <option value="">Default Icon / Sprite</option>
-                                {characters.map(c => <option key={c.id} value={c.id}>{c.name} (Sprite)</option>)}
-                            </select>
-                        </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );
@@ -1331,11 +1928,12 @@ interface BattleEditorProps {
     allScenes: Scene[];
     allBattles: Battle[];
     allMaps: WorldMap[];
+    assets?: AssetItem[];
     onChange: (u: Partial<Battle>) => void;
     onDelete: () => void;
 }
 
-const BattleEditor: React.FC<BattleEditorProps> = ({ battle, characters, chapters, allScenes, allBattles, allMaps, onChange, onDelete }) => {
+const BattleEditor: React.FC<BattleEditorProps> = ({ battle, characters, chapters, allScenes, allBattles, allMaps, assets, onChange, onDelete }) => {
     
     const toggleEffect = (type: 'scene' | 'transition' | 'battle', targetId: string, action: 'unlock' | 'lock') => {
         const effects = battle.onWinEffect ? [...battle.onWinEffect] : [];
@@ -1380,6 +1978,7 @@ const BattleEditor: React.FC<BattleEditorProps> = ({ battle, characters, chapter
                 label="Battle Background" 
                 value={battle.backgroundSrc} 
                 onChange={val => onChange({ backgroundSrc: val })} 
+                assets={assets}
                 defaultPrompt={`${battle.name} battle background backdrop, epic anime combat arena, visual novel action backdrop, digital painting, dramatic cinematic lighting, masterpiece`}
             />
 
@@ -1389,40 +1988,56 @@ const BattleEditor: React.FC<BattleEditorProps> = ({ battle, characters, chapter
                 {/* Player Team */}
                 <div className="bg-gray-800 p-4 rounded border border-gray-700">
                     <h4 className="font-bold text-emerald-400 mb-2 flex items-center gap-2"><Users size={16}/> Player Team</h4>
-                    <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
-                        {characters.map(c => (
-                            <label key={c.id} className="flex items-center gap-2 bg-gray-900 p-2 rounded border border-gray-700 cursor-pointer hover:bg-gray-800">
-                                <input 
-                                    type="checkbox"
-                                    checked={battle.playerCharacterIds.includes(c.id)}
-                                    onChange={e => {
-                                        if (e.target.checked) onChange({ playerCharacterIds: [...battle.playerCharacterIds, c.id] });
-                                        else onChange({ playerCharacterIds: battle.playerCharacterIds.filter(id => id !== c.id) });
-                                    }}
-                                />
-                                <span className="text-sm">{c.name}</span>
-                            </label>
-                        ))}
+                    <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
+                        {characters.map(c => {
+                            const group = getCharacterGroup(c);
+                            return (
+                                <label key={c.id} className="flex items-center justify-between gap-2 bg-gray-900 p-2 rounded border border-gray-700 cursor-pointer hover:bg-gray-800">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <input 
+                                            type="checkbox"
+                                            checked={battle.playerCharacterIds.includes(c.id)}
+                                            onChange={e => {
+                                                if (e.target.checked) onChange({ playerCharacterIds: [...battle.playerCharacterIds, c.id] });
+                                                else onChange({ playerCharacterIds: battle.playerCharacterIds.filter(id => id !== c.id) });
+                                            }}
+                                        />
+                                        <span className="text-xs text-white font-medium truncate">{c.name}</span>
+                                    </div>
+                                    <span className={`text-[9px] px-1.5 py-0.2 rounded border ${group.badgeBg} ${group.badgeBorder} ${group.textColor} font-semibold flex-shrink-0`}>
+                                        {group.shortLabel}
+                                    </span>
+                                </label>
+                            );
+                        })}
                     </div>
                 </div>
 
                 {/* Enemy Team */}
                 <div className="bg-gray-800 p-4 rounded border border-gray-700">
                     <h4 className="font-bold text-red-400 mb-2 flex items-center gap-2"><Target size={16}/> Enemy Team</h4>
-                    <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
-                         {characters.map(c => (
-                            <label key={c.id} className="flex items-center gap-2 bg-gray-900 p-2 rounded border border-gray-700 cursor-pointer hover:bg-gray-800">
-                                <input 
-                                    type="checkbox"
-                                    checked={battle.enemyCharacterIds.includes(c.id)}
-                                    onChange={e => {
-                                        if (e.target.checked) onChange({ enemyCharacterIds: [...battle.enemyCharacterIds, c.id] });
-                                        else onChange({ enemyCharacterIds: battle.enemyCharacterIds.filter(id => id !== c.id) });
-                                    }}
-                                />
-                                <span className="text-sm">{c.name}</span>
-                            </label>
-                        ))}
+                    <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
+                         {characters.map(c => {
+                            const group = getCharacterGroup(c);
+                            return (
+                                <label key={c.id} className="flex items-center justify-between gap-2 bg-gray-900 p-2 rounded border border-gray-700 cursor-pointer hover:bg-gray-800">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <input 
+                                            type="checkbox"
+                                            checked={battle.enemyCharacterIds.includes(c.id)}
+                                            onChange={e => {
+                                                if (e.target.checked) onChange({ enemyCharacterIds: [...battle.enemyCharacterIds, c.id] });
+                                                else onChange({ enemyCharacterIds: battle.enemyCharacterIds.filter(id => id !== c.id) });
+                                            }}
+                                        />
+                                        <span className="text-xs text-white font-medium truncate">{c.name}</span>
+                                    </div>
+                                    <span className={`text-[9px] px-1.5 py-0.2 rounded border ${group.badgeBg} ${group.badgeBorder} ${group.textColor} font-semibold flex-shrink-0`}>
+                                        {group.shortLabel}
+                                    </span>
+                                </label>
+                            );
+                        })}
                     </div>
                 </div>
             </div>
@@ -1479,6 +2094,7 @@ interface EditorProps {
   scenes: Scene[];
   maps: WorldMap[];
   battles: Battle[];
+  assets?: AssetItem[];
   storyLog?: StoryLogEntry[]; // New prop for context awareness
   onUpdateWorldInfo: (w: WorldInfo) => void;
   onUpdateChapters: (c: Chapter[]) => void;
@@ -1486,9 +2102,10 @@ interface EditorProps {
   onUpdateScenes: (s: Scene[]) => void;
   onUpdateMaps: (m: WorldMap[]) => void;
   onUpdateBattles: (b: Battle[]) => void;
+  onUpdateAssets?: (a: AssetItem[]) => void;
   onPlay: () => void;
   onQuickSave: () => Promise<boolean>;
-  onExportProject: () => void;
+  onExportProject: (includeMedia?: boolean) => void;
   onImportProject: (file: File) => void;
   onExportSave?: () => void;
   onImportSave?: (file: File) => void;
@@ -1497,11 +2114,36 @@ interface EditorProps {
 }
 
 export const Editor: React.FC<EditorProps> = (props) => {
-    const [tab, setTab] = useState<'home' | 'world' | 'chapters' | 'chars' | 'scenes' | 'maps' | 'battles'>('home');
+    const [tab, setTab] = useState<'home' | 'world' | 'chapters' | 'chars' | 'scenes' | 'maps' | 'battles' | 'assets'>('home');
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [scenePrompt, setScenePrompt] = useState("");
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    const [isSubSidebarOpen, setIsSubSidebarOpen] = useState(true);
+    const [quickSaveSuccess, setQuickSaveSuccess] = useState(false);
+
+    const [charSearch, setCharSearch] = useState('');
+    const [charGroupFilter, setCharGroupFilter] = useState<'all' | CharacterGroupKey>('all');
+    const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+    const navItems: { id: typeof tab; label: string; icon: React.ReactNode }[] = [
+        { id: 'home', label: 'Home Settings', icon: <Play size={16}/> },
+        { id: 'world', label: 'World & Lore', icon: <Book size={16}/> },
+        { id: 'chapters', label: 'Chapters', icon: <Book size={16}/> },
+        { id: 'chars', label: 'Characters', icon: <Users size={16}/> },
+        { id: 'scenes', label: 'Scenes', icon: <Monitor size={16}/> },
+        { id: 'maps', label: 'Maps', icon: <MapIcon size={16}/> },
+        { id: 'battles', label: 'Battles', icon: <Target size={16}/> },
+        { id: 'assets', label: 'Assets', icon: <FolderOpen size={16}/> },
+    ];
+
+    const handleQuickSaveClick = async () => {
+        if (props.onQuickSave) {
+            await props.onQuickSave();
+            setQuickSaveSuccess(true);
+            setTimeout(() => setQuickSaveSuccess(false), 2500);
+        }
+    };
 
     const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files?.[0]) props.onImportProject(e.target.files[0]);
@@ -1514,7 +2156,7 @@ export const Editor: React.FC<EditorProps> = (props) => {
     const handleGenerateScene = async () => {
         setIsGenerating(true);
         try {
-            const newSceneData = await generateAutoScene(props.characters, props.storyLog || [], props.worldInfo, scenePrompt);
+            const newSceneData = await generateAutoScene(props.characters, props.storyLog || [], props.worldInfo, scenePrompt, props.assets);
             const id = crypto.randomUUID();
             
             // Build the full scene object
@@ -1529,7 +2171,7 @@ export const Editor: React.FC<EditorProps> = (props) => {
                 sensoryDetails: newSceneData.sensoryDetails || "",
                 environmentDetails: newSceneData.environmentDetails || "",
                 characters: newSceneData.characters as any || [],
-                backgroundSrc: null,
+                backgroundSrc: newSceneData.suggestedBackgroundSrc || null,
                 effects: [],
                 isRepeatable: false
             };
@@ -1555,19 +2197,42 @@ export const Editor: React.FC<EditorProps> = (props) => {
             </button>
 
             {/* Sidebar */}
-            <div className={`${isSidebarOpen ? 'w-64' : 'w-0'} md:w-64 transition-all duration-300 ease-in-out bg-gray-900 border-r border-gray-800 flex flex-col flex-shrink-0 z-40 relative md:static absolute inset-y-0 left-0 overflow-hidden`}>
-                <div className="p-3 md:p-4 border-b border-gray-800 flex justify-between items-center whitespace-nowrap min-w-[16rem]">
-                    <h1 className="text-lg md:text-xl font-bold text-emerald-500 flex items-center gap-2"><Layout size={18}/> VN Creator</h1>
-                    <button className="md:hidden text-gray-500" onClick={() => setIsSidebarOpen(false)}><XCircle size={20}/></button>
+            <div className={`${isSidebarOpen ? 'w-64 md:w-64' : 'w-0 md:w-16'} transition-all duration-300 ease-in-out bg-gray-900 border-r border-gray-800 flex flex-col flex-shrink-0 z-40 relative md:static absolute inset-y-0 left-0 overflow-hidden`}>
+                <div className={`p-3 md:p-4 border-b border-gray-800 flex items-center whitespace-nowrap ${isSidebarOpen ? 'justify-between min-w-[16rem]' : 'justify-center min-w-0'}`}>
+                    {isSidebarOpen ? (
+                        <>
+                            <h1 className="text-lg md:text-xl font-bold text-emerald-500 flex items-center gap-2"><Layout size={18}/> VN Creator</h1>
+                            <div className="flex items-center gap-1">
+                                <button className="hidden md:flex text-gray-400 hover:text-white p-1 rounded hover:bg-gray-800 transition-colors" onClick={() => setIsSidebarOpen(false)} title="Menü einklappen">
+                                    <ChevronLeft size={18}/>
+                                </button>
+                                <button className="md:hidden text-gray-500" onClick={() => setIsSidebarOpen(false)}><XCircle size={20}/></button>
+                            </div>
+                        </>
+                    ) : (
+                        <button className="hidden md:flex text-gray-400 hover:text-white p-1 rounded hover:bg-gray-800 transition-colors" onClick={() => setIsSidebarOpen(true)} title="Menü ausklappen">
+                            <ChevronRight size={18}/>
+                        </button>
+                    )}
                 </div>
-                <div className="flex-1 overflow-y-auto py-2 md:py-4 space-y-1 min-w-[16rem]">
-                    <button onClick={() => { setTab('home'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'home' ? 'bg-emerald-900/30 text-emerald-400 border-r-2 border-emerald-500' : 'text-gray-400 hover:bg-gray-800'}`}><Play size={16}/> Home Settings</button>
-                    <button onClick={() => { setTab('world'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'world' ? 'bg-emerald-900/30 text-emerald-400 border-r-2 border-emerald-500' : 'text-gray-400 hover:bg-gray-800'}`}><Book size={16}/> World & Lore</button>
-                    <button onClick={() => { setTab('chapters'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'chapters' ? 'bg-emerald-900/30 text-emerald-400 border-r-2 border-emerald-500' : 'text-gray-400 hover:bg-gray-800'}`}><Book size={16}/> Chapters</button>
-                    <button onClick={() => { setTab('chars'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'chars' ? 'bg-emerald-900/30 text-emerald-400 border-r-2 border-emerald-500' : 'text-gray-400 hover:bg-gray-800'}`}><Users size={16}/> Characters</button>
-                    <button onClick={() => { setTab('scenes'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'scenes' ? 'bg-emerald-900/30 text-emerald-400 border-r-2 border-emerald-500' : 'text-gray-400 hover:bg-gray-800'}`}><Monitor size={16}/> Scenes</button>
-                    <button onClick={() => { setTab('maps'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'maps' ? 'bg-emerald-900/30 text-emerald-400 border-r-2 border-emerald-500' : 'text-gray-400 hover:bg-gray-800'}`}><MapIcon size={16}/> Maps</button>
-                    <button onClick={() => { setTab('battles'); setSelectedId(null); setIsSidebarOpen(false); }} className={`w-full text-left px-4 md:px-6 py-2 md:py-3 flex items-center gap-3 ${tab === 'battles' ? 'bg-emerald-900/30 text-emerald-400 border-r-2 border-emerald-500' : 'text-gray-400 hover:bg-gray-800'}`}><Target size={16}/> Battles</button>
+                <div className={`flex-1 overflow-y-auto py-2 md:py-4 space-y-1 ${isSidebarOpen ? 'min-w-[16rem]' : 'min-w-0'}`}>
+                    {navItems.map(item => (
+                        <button 
+                            key={item.id} 
+                            onClick={() => { setTab(item.id); setSelectedId(null); if (window.innerWidth < 768) setIsSidebarOpen(false); }} 
+                            title={item.label}
+                            className={`w-full text-left py-2.5 md:py-3 flex items-center gap-3 transition-colors ${
+                                isSidebarOpen ? 'px-4 md:px-6' : 'px-0 justify-center'
+                            } ${
+                                tab === item.id 
+                                    ? 'bg-emerald-900/30 text-emerald-400 border-r-2 border-emerald-500 font-semibold' 
+                                    : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
+                            }`}
+                        >
+                            <span className="flex-shrink-0">{item.icon}</span>
+                            {isSidebarOpen && <span className="truncate">{item.label}</span>}
+                        </button>
+                    ))}
                 </div>
             </div>
             
@@ -1598,7 +2263,24 @@ export const Editor: React.FC<EditorProps> = (props) => {
                                 <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><Save className="text-blue-500" size={20}/> Save Data Management</h3>
                                 <p className="text-xs text-gray-400 mb-2">Save progress locally or export/import save files.</p>
                                 <div className="grid grid-cols-1 gap-3">
-                                    <Button variant="secondary" onClick={props.onQuickSave} title="Quick Save to Local Storage" className="py-2 justify-center"><Save size={16} className="mr-2"/> Quick Save locally</Button>
+                                    <Button 
+                                        variant="secondary" 
+                                        onClick={handleQuickSaveClick} 
+                                        title="Quick Save Project to Local Browser Storage" 
+                                        className={`py-2 justify-center transition-colors ${quickSaveSuccess ? 'border-emerald-500 text-emerald-400 bg-emerald-950/40' : ''}`}
+                                    >
+                                        {quickSaveSuccess ? (
+                                            <>
+                                                <Check size={16} className="mr-2 text-emerald-400"/>
+                                                Projekt lokal gespeichert!
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Save size={16} className="mr-2"/>
+                                                Quick Save locally
+                                            </>
+                                        )}
+                                    </Button>
                                     <div className="grid grid-cols-2 gap-3">
                                         <Button variant="secondary" onClick={props.onExportSave} title="Export Save Game to File" className="py-2 justify-center"><Download size={16} className="mr-2"/> Export Save</Button>
                                         <div className="relative">
@@ -1610,12 +2292,13 @@ export const Editor: React.FC<EditorProps> = (props) => {
                             </div>
 
                             <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 space-y-4 md:col-span-2">
-                                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><Download className="text-emerald-500" size={20}/> Project Data (Editor)</h3>
-                                <p className="text-xs text-gray-400 mb-4">Export or import the full VN Creator project (characters, scenes, chapters, lore, maps, battles). This does not include game progress.</p>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <Button variant="secondary" onClick={props.onExportProject} title="Export Editor Project" className="py-3 justify-center font-semibold text-emerald-400 border-emerald-500/30 hover:bg-emerald-900/20"><Download size={18} className="mr-2"/> Export Full Project</Button>
+                                <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2"><Download className="text-emerald-500" size={20}/> Project Data (Editor)</h3>
+                                <p className="text-xs text-gray-400 mb-4">Exportieren oder Importieren des VN Creator Projekts. Bei "Full Project" werden alle generierten KI-Bilder, Sprach- und BGM-Dateien mit in die ZIP gepackt.</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <Button variant="secondary" onClick={() => props.onExportProject(true)} title="Export Full Project with all Media" className="py-3 justify-center font-semibold text-emerald-400 border-emerald-500/30 hover:bg-emerald-900/20"><Download size={18} className="mr-2"/> Export Full (inkl. Medien)</Button>
+                                    <Button variant="secondary" onClick={() => props.onExportProject(false)} title="Export Light Project (Data only)" className="py-3 justify-center font-semibold text-cyan-400 border-cyan-500/30 hover:bg-cyan-900/20"><Download size={18} className="mr-2"/> Export Light (nur Daten)</Button>
                                     <div className="relative">
-                                        <Button variant="secondary" className="w-full py-3 justify-center font-semibold text-emerald-400 border-emerald-500/30 hover:bg-emerald-900/20" title="Import Editor Project"><Upload size={18} className="mr-2"/> Import Full Project</Button>
+                                        <Button variant="secondary" className="w-full py-3 justify-center font-semibold text-emerald-400 border-emerald-500/30 hover:bg-emerald-900/20" title="Import Editor Project"><Upload size={18} className="mr-2"/> Import Project (ZIP/JSON)</Button>
                                         <input type="file" onChange={handleImport} className="absolute inset-0 opacity-0 cursor-pointer" accept=".json,.zip"/>
                                     </div>
                                 </div>
@@ -1859,73 +2542,286 @@ export const Editor: React.FC<EditorProps> = (props) => {
                     </div>
                 )}
 
-                {tab === 'chapters' && (
-                    <div className="flex flex-col md:flex-row h-full gap-4 md:gap-6">
-                        <div className={`w-full md:w-1/3 border-none md:border-r border-gray-800 pb-4 md:pb-0 md:pr-4 overflow-y-auto ${selectedId ? 'hidden md:block' : 'block'}`}>
-                            <div className="flex justify-between items-center mb-4">
-                                <h2 className="text-xl font-bold text-white flex items-center gap-2"><Book size={20}/> Chapters</h2>
-                            </div>
-                            <Button className="w-full mb-4 py-1.5 text-sm" onClick={() => {
-                                const id = crypto.randomUUID();
-                                props.onUpdateChapters([...props.chapters, {
-                                    id,
-                                    name: 'New Chapter',
-                                    description: ''
-                                }]);
-                                setSelectedId(id);
-                            }}><Plus size={14}/> Add Chapter</Button>
-                            <div className="space-y-2">
-                                {props.chapters.map(c => (
-                                    <div key={c.id} onClick={() => setSelectedId(c.id)} className={`p-2 md:p-3 rounded cursor-pointer border text-sm ${selectedId === c.id ? 'bg-emerald-900/50 border-emerald-500' : 'bg-gray-900 border-gray-800 hover:bg-gray-800'}`}>
-                                        <div className="font-bold text-white truncate">{c.name || 'Unnamed Chapter'}</div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                        <div className={`flex-1 overflow-y-auto ${!selectedId ? 'hidden md:block' : 'block'}`}>
-                            {selectedId && (
-                                <div className="md:hidden mb-4">
-                                    <Button variant="secondary" className="text-xs py-1 px-2" onClick={() => setSelectedId(null)}><ArrowLeft size={14}/> Back to List</Button>
+                {tab === 'chapters' && (() => {
+                    const sortedChapters = [...props.chapters].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                    
+                    const handleReorderChapter = (chapterId: string, direction: 'up' | 'down') => {
+                        const index = sortedChapters.findIndex(c => c.id === chapterId);
+                        if (index === -1) return;
+                        const targetIndex = direction === 'up' ? index - 1 : index + 1;
+                        if (targetIndex < 0 || targetIndex >= sortedChapters.length) return;
+
+                        const updated = [...sortedChapters];
+                        const [moved] = updated.splice(index, 1);
+                        updated.splice(targetIndex, 0, moved);
+
+                        const reordered = updated.map((c, i) => ({ ...c, order: i + 1 }));
+                        props.onUpdateChapters(reordered);
+                    };
+
+                    const handleCreateSceneForChapter = (chapterId: string) => {
+                        const newId = crypto.randomUUID();
+                        const chapterScenes = props.scenes.filter(s => s.chapterId === chapterId);
+                        const nextOrder = chapterScenes.length + 1;
+                        const newScene: Scene = {
+                            id: newId,
+                            chapterId: chapterId,
+                            name: `Szene ${nextOrder}`,
+                            description: '',
+                            goal: '',
+                            characters: [],
+                            backgroundSrc: null,
+                            order: nextOrder,
+                            isMainScene: true,
+                        };
+                        props.onUpdateScenes([...props.scenes, newScene]);
+                        setTab('scenes');
+                        setSelectedId(newId);
+                    };
+
+                    return (
+                        <div className="flex flex-col md:flex-row h-full gap-4 md:gap-6">
+                            <div className={`w-full ${isSubSidebarOpen ? 'md:w-1/3' : 'md:w-0 md:hidden'} border-none md:border-r border-gray-800 pb-4 md:pb-0 md:pr-4 overflow-y-auto ${selectedId ? 'hidden md:block' : 'block'}`}>
+                                <div className="flex justify-between items-center mb-4">
+                                    <h2 className="text-xl font-bold text-white flex items-center gap-2"><Book size={20}/> Chapters</h2>
+                                    <button onClick={() => setIsSubSidebarOpen(false)} className="hidden md:flex text-gray-400 hover:text-white p-1 rounded hover:bg-gray-800 transition-colors" title="Kapitel-Liste einklappen">
+                                        <ChevronLeft size={18}/>
+                                    </button>
                                 </div>
-                            )}
-                            {selectedId ? (
-                                <ChapterEditor 
-                                    key={selectedId} 
-                                    chapter={props.chapters.find(c => c.id === selectedId)!} 
-                                    onChange={(u) => props.onUpdateChapters(props.chapters.map(x => x.id === selectedId ? { ...x, ...u } : x))} 
-                                    onDelete={() => { props.onUpdateChapters(props.chapters.filter(x => x.id !== selectedId)); setSelectedId(null); }} 
-                                />
-                            ) : (
-                                <div className="h-full flex items-center justify-center text-gray-600 italic text-sm">Select a chapter from the list to edit its details.</div>
-                            )}
+                                <Button className="w-full mb-4 py-1.5 text-sm" onClick={() => {
+                                    const id = crypto.randomUUID();
+                                    const nextOrder = props.chapters.length + 1;
+                                    props.onUpdateChapters([...props.chapters, {
+                                        id,
+                                        order: nextOrder,
+                                        name: `Chapter ${nextOrder}`,
+                                        description: ''
+                                    }]);
+                                    setSelectedId(id);
+                                }}><Plus size={14}/> Add Chapter</Button>
+                                <div className="space-y-2">
+                                    {sortedChapters.map((c) => {
+                                        const sceneCount = props.scenes.filter(s => s.chapterId === c.id).length;
+                                        return (
+                                            <div key={c.id} onClick={() => setSelectedId(c.id)} className={`p-2.5 md:p-3 rounded-lg cursor-pointer border text-sm transition-colors ${selectedId === c.id ? 'bg-emerald-900/50 border-emerald-500' : 'bg-gray-900 border-gray-800 hover:bg-gray-800'}`}>
+                                                <div className="flex items-center justify-between">
+                                                    <div className="font-bold text-white truncate flex items-center gap-2">
+                                                        <span className="text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-800/80 px-1.5 py-0.5 rounded font-mono">
+                                                            #{c.order ?? 1}
+                                                        </span>
+                                                        {c.name || 'Unnamed Chapter'}
+                                                    </div>
+                                                    <span className="text-[10px] bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full border border-gray-700">
+                                                        {sceneCount} Szenen
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            <div className={`flex-1 overflow-y-auto ${!selectedId ? 'hidden md:block' : 'block'}`}>
+                                {!isSubSidebarOpen && (
+                                    <button onClick={() => setIsSubSidebarOpen(true)} className="hidden md:inline-flex mb-3 text-xs text-emerald-400 bg-gray-900 border border-gray-800 hover:bg-gray-800 px-2.5 py-1.5 rounded-lg items-center gap-1.5 font-medium transition-colors shadow-sm" title="Kapitel-Liste ausklappen">
+                                        <ChevronRight size={16}/> Kapitel-Liste anzeigen
+                                    </button>
+                                )}
+                                {selectedId && (
+                                    <div className="md:hidden mb-4">
+                                        <Button variant="secondary" className="text-xs py-1 px-2" onClick={() => setSelectedId(null)}><ArrowLeft size={14}/> Back to List</Button>
+                                    </div>
+                                )}
+                                {selectedId && props.chapters.find(c => c.id === selectedId) ? (
+                                    <ChapterEditor 
+                                        key={selectedId} 
+                                        chapter={props.chapters.find(c => c.id === selectedId)!} 
+                                        allScenes={props.scenes}
+                                        allChapters={props.chapters}
+                                        allMaps={props.maps}
+                                        onChange={(u) => props.onUpdateChapters(props.chapters.map(x => x.id === selectedId ? { ...x, ...u } : x))} 
+                                        onDelete={() => { props.onUpdateChapters(props.chapters.filter(x => x.id !== selectedId)); setSelectedId(null); }} 
+                                        onNavigateToScene={(sceneId) => {
+                                            setTab('scenes');
+                                            setSelectedId(sceneId);
+                                        }}
+                                        onCreateSceneForChapter={handleCreateSceneForChapter}
+                                        onUpdateScenes={props.onUpdateScenes}
+                                        onReorderChapter={(dir) => handleReorderChapter(selectedId, dir)}
+                                    />
+                                ) : (
+                                    <div className="h-full flex items-center justify-center text-gray-600 italic text-sm">Select a chapter from the list to edit its details and manage mapped scenes.</div>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                )}
+                    );
+                })()}
 
                 {tab === 'chars' && (
                     <div className="flex flex-col md:flex-row h-full gap-4 md:gap-6">
-                        <div className={`w-full md:w-1/3 border-none md:border-r border-gray-800 pb-4 md:pb-0 md:pr-4 overflow-y-auto ${selectedId ? 'hidden md:block' : 'block'}`}>
-                             <Button className="w-full mb-4 py-1.5 text-sm" onClick={() => {
-                                 const id = crypto.randomUUID();
-                                 props.onUpdateCharacters([...props.characters, { 
-                                     id, 
-                                     name: 'New Character', 
-                                     defaultDescription: '', 
-                                     rpgColor: '#ffffff',
-                                     imageSrc: null,
-                                     mapSpriteSrc: null 
-                                 }]);
-                                 setSelectedId(id);
-                             }}><Plus size={14}/> Add Character</Button>
-                             <div className="space-y-2">
-                                 {props.characters.map(c => (
-                                     <div key={c.id} onClick={() => setSelectedId(c.id)} className={`p-2 md:p-3 rounded cursor-pointer border text-sm ${selectedId === c.id ? 'bg-emerald-900/50 border-emerald-500' : 'bg-gray-900 border-gray-800 hover:bg-gray-800'}`}>
-                                         <div className="font-bold text-white">{c.name}</div>
-                                     </div>
-                                 ))}
-                             </div>
+                        <div className={`w-full ${isSubSidebarOpen ? 'md:w-1/3' : 'md:w-0 md:hidden'} border-none md:border-r border-gray-800 pb-4 md:pb-0 md:pr-4 overflow-y-auto ${selectedId ? 'hidden md:block' : 'block'}`}>
+                            <div className="flex justify-between items-center mb-3">
+                                <h2 className="text-lg font-bold text-white flex items-center gap-2"><Users size={18}/> Characters ({props.characters.length})</h2>
+                                <button onClick={() => setIsSubSidebarOpen(false)} className="hidden md:flex text-gray-400 hover:text-white p-1 rounded hover:bg-gray-800 transition-colors" title="Charakter-Liste einklappen">
+                                    <ChevronLeft size={18}/>
+                                </button>
+                            </div>
+
+                            {/* Search & Group Filter */}
+                            <div className="space-y-2 mb-3">
+                                <div className="relative">
+                                    <Search size={14} className="absolute left-2.5 top-2.5 text-gray-500" />
+                                    <input
+                                        type="text"
+                                        placeholder="Charakter suchen..."
+                                        value={charSearch}
+                                        onChange={e => setCharSearch(e.target.value)}
+                                        className="w-full bg-gray-900 border border-gray-800 rounded-lg pl-8 pr-7 py-1.5 text-xs text-white placeholder-gray-500 outline-none focus:border-emerald-500"
+                                    />
+                                    {charSearch && (
+                                        <button onClick={() => setCharSearch('')} className="absolute right-2 top-2 text-gray-500 hover:text-white">
+                                            <X size={12} />
+                                        </button>
+                                    )}
+                                </div>
+                                <select
+                                    value={charGroupFilter}
+                                    onChange={e => setCharGroupFilter(e.target.value as any)}
+                                    className="w-full bg-gray-900 border border-gray-800 rounded-lg px-2 py-1.5 text-xs text-gray-200 outline-none focus:border-emerald-500"
+                                >
+                                    <option value="all">Alle Kategorien ({props.characters.length})</option>
+                                    {CHARACTER_GROUPS.map(g => {
+                                        const count = props.characters.filter(c => getCharacterGroupKey(c) === g.id).length;
+                                        return (
+                                            <option key={g.id} value={g.id}>
+                                                {g.icon} {g.label} ({count})
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                            </div>
+
+                            <Button className="w-full mb-4 py-1.5 text-sm" onClick={() => {
+                                const id = crypto.randomUUID();
+                                let initialImportance: CharacterImportance = 'main';
+                                let initialAlignment: CharacterAlignment = 'gut';
+
+                                if (charGroupFilter === 'main_boese') { initialImportance = 'main'; initialAlignment = 'boese'; }
+                                else if (charGroupFilter === 'side_gut') { initialImportance = 'side'; initialAlignment = 'gut'; }
+                                else if (charGroupFilter === 'side_boese') { initialImportance = 'side'; initialAlignment = 'boese'; }
+                                else if (charGroupFilter === 'neutral') { initialImportance = 'side'; initialAlignment = 'neutral'; }
+
+                                props.onUpdateCharacters([...props.characters, { 
+                                    id, 
+                                    name: 'Neuer Charakter', 
+                                    defaultDescription: '', 
+                                    rpgColor: '#ffffff',
+                                    imageSrc: null,
+                                    mapSpriteSrc: null,
+                                    importance: initialImportance,
+                                    alignment: initialAlignment
+                                }]);
+                                setSelectedId(id);
+                            }}><Plus size={14}/> Add Character</Button>
+
+                            {/* Grouped Characters List */}
+                            {(() => {
+                                const filteredCharacters = props.characters.filter(c => {
+                                    if (charSearch.trim()) {
+                                        const q = charSearch.toLowerCase();
+                                        const matchesName = c.name?.toLowerCase().includes(q);
+                                        const matchesDesc = c.defaultDescription?.toLowerCase().includes(q);
+                                        if (!matchesName && !matchesDesc) return false;
+                                    }
+                                    return true;
+                                });
+
+                                if (filteredCharacters.length === 0) {
+                                    return (
+                                        <div className="p-4 bg-gray-900/50 border border-gray-800 rounded-lg text-center text-xs text-gray-500">
+                                            Keine Charaktere gefunden.
+                                        </div>
+                                    );
+                                }
+
+                                return (
+                                    <div className="space-y-3">
+                                        {CHARACTER_GROUPS.map(group => {
+                                            if (charGroupFilter !== 'all' && charGroupFilter !== group.id) return null;
+
+                                            const groupChars = filteredCharacters.filter(c => getCharacterGroupKey(c) === group.id);
+                                            const isCollapsed = collapsedGroups[group.id];
+
+                                            if (groupChars.length === 0 && (charSearch.trim() || charGroupFilter !== 'all')) return null;
+
+                                            return (
+                                                <div key={group.id} className="bg-gray-950/40 border border-gray-800/80 rounded-xl overflow-hidden">
+                                                    {/* Group Header */}
+                                                    <button
+                                                        onClick={() => setCollapsedGroups(prev => ({ ...prev, [group.id]: !prev[group.id] }))}
+                                                        className="w-full flex items-center justify-between p-2.5 bg-gray-900/60 hover:bg-gray-800/60 transition-colors text-left border-b border-gray-800/60"
+                                                    >
+                                                        <div className="flex items-center gap-2 font-bold text-xs text-gray-200">
+                                                            <span>{group.icon}</span>
+                                                            <span className="truncate">{group.label}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className={`text-[10px] px-1.5 py-0.2 rounded-full border ${group.badgeBg} ${group.badgeBorder} ${group.textColor} font-mono font-bold`}>
+                                                                {groupChars.length}
+                                                            </span>
+                                                            {isCollapsed ? <ChevronDown size={14} className="text-gray-400" /> : <ChevronUp size={14} className="text-gray-400" />}
+                                                        </div>
+                                                    </button>
+
+                                                    {/* Group Content */}
+                                                    {!isCollapsed && (
+                                                        <div className="p-1.5 space-y-1.5">
+                                                            {groupChars.length === 0 ? (
+                                                                <div className="text-[11px] text-gray-600 italic px-3 py-2 text-center">Keine Charaktere in dieser Kategorie</div>
+                                                            ) : (
+                                                                groupChars.map(c => {
+                                                                    const isSelected = selectedId === c.id;
+                                                                    const charGroup = getCharacterGroup(c);
+                                                                    return (
+                                                                        <div
+                                                                            key={c.id}
+                                                                            onClick={() => setSelectedId(c.id)}
+                                                                            className={`p-2 rounded-lg cursor-pointer border text-xs flex items-center gap-2.5 transition-all ${isSelected ? 'bg-emerald-900/50 border-emerald-500 shadow-md' : 'bg-gray-900/80 border-gray-800/80 hover:bg-gray-800/90'}`}
+                                                                        >
+                                                                            <div className="w-9 h-9 rounded-full bg-gray-800 border border-gray-700 flex-shrink-0 overflow-hidden flex items-center justify-center text-gray-400 font-bold">
+                                                                                {c.imageSrc ? (
+                                                                                    <AsyncImage src={c.imageSrc} className="w-full h-full object-cover" />
+                                                                                ) : (
+                                                                                    c.name?.[0]?.toUpperCase() || '?'
+                                                                                )}
+                                                                            </div>
+                                                                            <div className="min-w-0 flex-1">
+                                                                                <div className="flex items-center justify-between gap-1">
+                                                                                    <span className="font-bold text-white truncate">{c.name}</span>
+                                                                                    <span className={`text-[9px] px-1.5 py-0.2 rounded border ${charGroup.badgeBg} ${charGroup.badgeBorder} ${charGroup.textColor} font-semibold flex-shrink-0`}>
+                                                                                        {charGroup.shortLabel}
+                                                                                    </span>
+                                                                                </div>
+                                                                                <div className="text-[10px] text-gray-400 truncate mt-0.5">{c.defaultDescription || 'Keine Beschreibung'}</div>
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                })
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                );
+                            })()}
                         </div>
                         <div className={`flex-1 overflow-y-auto ${!selectedId ? 'hidden md:block' : 'block'}`}>
+                             {!isSubSidebarOpen && (
+                                 <button onClick={() => setIsSubSidebarOpen(true)} className="hidden md:inline-flex mb-3 text-xs text-emerald-400 bg-gray-900 border border-gray-800 hover:bg-gray-800 px-2.5 py-1.5 rounded-lg items-center gap-1.5 font-medium transition-colors shadow-sm" title="Charakter-Liste ausklappen">
+                                     <ChevronRight size={16}/> Charakter-Liste anzeigen
+                                 </button>
+                             )}
                              {selectedId && props.characters.find(c => c.id === selectedId) && (
                                  <div className="flex flex-col h-full">
                                      <button className="md:hidden mb-4 text-emerald-400 font-bold flex items-center gap-1.5" onClick={() => setSelectedId(null)}>
@@ -1934,6 +2830,7 @@ export const Editor: React.FC<EditorProps> = (props) => {
                                      <CharacterEditor 
                                         key={selectedId}
                                         character={props.characters.find(c => c.id === selectedId)!}
+                                        assets={props.assets}
                                         onChange={(u) => props.onUpdateCharacters(props.characters.map(x => x.id === selectedId ? { ...x, ...u } : x))}
                                         onDelete={() => {
                                             props.onUpdateCharacters(props.characters.filter(x => x.id !== selectedId));
@@ -1946,56 +2843,137 @@ export const Editor: React.FC<EditorProps> = (props) => {
                     </div>
                 )}
 
-                {tab === 'scenes' && (
-                    <div className="flex flex-col md:flex-row h-full gap-4 md:gap-6">
-                        <div className={`w-full md:w-1/3 border-none md:border-r border-gray-800 pb-4 md:pb-0 md:pr-4 overflow-y-auto ${selectedId ? 'hidden md:block' : 'block'}`}>
-                             <div className="flex gap-2 mb-2">
-                                <Button className="flex-1 py-1.5 text-sm" onClick={() => { const id = crypto.randomUUID(); props.onUpdateScenes([...props.scenes, { id, name: 'New Scene', description: '', goal: '', characters: [], backgroundSrc: null }]); setSelectedId(id); }}><Plus size={14}/> Add Scene</Button>
-                                <Button 
-                                    className="bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20 py-1.5" 
-                                    title="Auto-Generate Scene from Story Log"
-                                    onClick={handleGenerateScene}
-                                    disabled={isGenerating}
-                                >
-                                    {isGenerating ? <Loader2 size={14} className="animate-spin"/> : <Sparkles size={14}/>}
-                                </Button>
-                             </div>
-                             <input 
-                                type="text"
-                                className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white text-xs mb-4 placeholder-gray-500"
-                                placeholder="Optional prompt for AI (e.g. 'Beach episode')"
-                                value={scenePrompt}
-                                onChange={e => setScenePrompt(e.target.value)}
-                             />
-                             
-                             <div className="space-y-2">{props.scenes.map(s => (<div key={s.id} onClick={() => setSelectedId(s.id)} className={`p-2 md:p-3 rounded cursor-pointer border text-sm ${selectedId === s.id ? 'bg-emerald-900/50 border-emerald-500' : 'bg-gray-900 border-gray-800 hover:bg-gray-800'}`}><div className="font-bold text-white truncate">{s.name}</div><div className="text-xs text-gray-500 truncate">{s.goal || 'No goal'}</div></div>))}</div>
-                        </div>
-                        <div className={`flex-1 overflow-y-auto ${!selectedId ? 'hidden md:block' : 'block'}`}>
-                            {selectedId && props.scenes.find(s => s.id === selectedId) && (
-                                <div className="flex flex-col h-full">
-                                     <button className="md:hidden mb-4 text-emerald-400 font-bold flex items-center gap-1.5" onClick={() => setSelectedId(null)}>
-                                         <ArrowLeft size={16}/> Back to Scenes
-                                     </button>
-                                     <SceneEditor key={selectedId} scene={props.scenes.find(s => s.id === selectedId)!} allScenes={props.scenes} allBattles={props.battles} allMaps={props.maps} characters={props.characters} chapters={props.chapters} worldInfo={props.worldInfo} onChange={(u) => props.onUpdateScenes(props.scenes.map(x => x.id === selectedId ? { ...x, ...u } : x))} onDelete={() => { props.onUpdateScenes(props.scenes.filter(x => x.id !== selectedId)); setSelectedId(null); }} />
+                {tab === 'scenes' && (() => {
+                    const sortedScenes = [...props.scenes].sort((a, b) => {
+                        const chapA = props.chapters.find(c => c.id === a.chapterId);
+                        const chapB = props.chapters.find(c => c.id === b.chapterId);
+                        const chapOrderA = chapA?.order ?? 999;
+                        const chapOrderB = chapB?.order ?? 999;
+                        if (chapOrderA !== chapOrderB) return chapOrderA - chapOrderB;
+                        return (a.order ?? 0) - (b.order ?? 0);
+                    });
+
+                    return (
+                        <div className="flex flex-col md:flex-row h-full gap-4 md:gap-6">
+                            <div className={`w-full ${isSubSidebarOpen ? 'md:w-1/3' : 'md:w-0 md:hidden'} border-none md:border-r border-gray-800 pb-4 md:pb-0 md:pr-4 overflow-y-auto ${selectedId ? 'hidden md:block' : 'block'}`}>
+                                <div className="flex justify-between items-center mb-3">
+                                    <h2 className="text-lg font-bold text-white flex items-center gap-2"><Monitor size={18}/> Scenes</h2>
+                                    <button onClick={() => setIsSubSidebarOpen(false)} className="hidden md:flex text-gray-400 hover:text-white p-1 rounded hover:bg-gray-800 transition-colors" title="Szenen-Liste einklappen">
+                                        <ChevronLeft size={18}/>
+                                    </button>
                                 </div>
-                            )}
+                                 <div className="flex gap-2 mb-2">
+                                    <Button className="flex-1 py-1.5 text-sm" onClick={() => { 
+                                        const id = crypto.randomUUID(); 
+                                        const firstChap = props.chapters[0];
+                                        props.onUpdateScenes([...props.scenes, { 
+                                            id, 
+                                            chapterId: firstChap?.id,
+                                            name: 'New Scene', 
+                                            description: '', 
+                                            goal: '', 
+                                            characters: [], 
+                                            backgroundSrc: null,
+                                            order: props.scenes.length + 1,
+                                            isMainScene: true
+                                        }]); 
+                                        setSelectedId(id); 
+                                    }}><Plus size={14}/> Add Scene</Button>
+                                    <Button 
+                                        className="bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20 py-1.5" 
+                                        title="Auto-Generate Scene from Story Log"
+                                        onClick={handleGenerateScene}
+                                        disabled={isGenerating}
+                                    >
+                                        {isGenerating ? <Loader2 size={14} className="animate-spin"/> : <Sparkles size={14}/>}
+                                    </Button>
+                                 </div>
+                                 <input 
+                                    type="text"
+                                    className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white text-xs mb-4 placeholder-gray-500"
+                                    placeholder="Optional prompt for AI (e.g. 'Beach episode')"
+                                    value={scenePrompt}
+                                    onChange={e => setScenePrompt(e.target.value)}
+                                 />
+                                 
+                                 <div className="space-y-2">
+                                    {sortedScenes.map(s => {
+                                        const chapter = props.chapters.find(c => c.id === s.chapterId);
+                                        const isMain = s.isMainScene !== false;
+                                        const assignedMap = props.maps.find(m => m.id === s.mapId) || props.maps.find(m => m.spots?.some(spot => spot.type === 'scene' && spot.sceneId === s.id));
+                                        return (
+                                            <div 
+                                                key={s.id} 
+                                                onClick={() => setSelectedId(s.id)} 
+                                                className={`p-2.5 md:p-3 rounded-lg cursor-pointer border text-sm transition-colors ${selectedId === s.id ? 'bg-emerald-900/50 border-emerald-500' : 'bg-gray-900 border-gray-800 hover:bg-gray-800'}`}
+                                            >
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <div className="font-bold text-white truncate">{s.name}</div>
+                                                    <span className="text-[10px] text-emerald-400 font-mono flex-shrink-0">
+                                                        Pos #{s.order || '?'}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center justify-between text-xs text-gray-400 mt-1 gap-2">
+                                                    <span className="truncate text-gray-400 text-[11px]">
+                                                        {chapter ? chapter.name : 'Kein Kapitel'}
+                                                    </span>
+                                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                                        <span className={`text-[9px] px-1.5 py-0.2 rounded ${isMain ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-amber-950 text-amber-300 border border-amber-800'}`}>
+                                                            {isMain ? 'Haupt' : 'Neben'}
+                                                        </span>
+                                                        <span className="text-[10px] text-sky-300 bg-sky-950/80 border border-sky-800/80 px-1.5 py-0.2 rounded flex items-center gap-0.5 truncate max-w-[100px]" title={assignedMap?.name || 'Keine Karte'}>
+                                                            <MapIcon size={10}/> {assignedMap ? assignedMap.name : 'Keine Map'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                 </div>
+                            </div>
+                            <div className={`flex-1 overflow-y-auto ${!selectedId ? 'hidden md:block' : 'block'}`}>
+                                {!isSubSidebarOpen && (
+                                    <button onClick={() => setIsSubSidebarOpen(true)} className="hidden md:inline-flex mb-3 text-xs text-emerald-400 bg-gray-900 border border-gray-800 hover:bg-gray-800 px-2.5 py-1.5 rounded-lg items-center gap-1.5 font-medium transition-colors shadow-sm" title="Szenen-Liste ausklappen">
+                                        <ChevronRight size={16}/> Szenen-Liste anzeigen
+                                    </button>
+                                )}
+                                {selectedId && props.scenes.find(s => s.id === selectedId) && (
+                                    <div className="flex flex-col h-full">
+                                         <button className="md:hidden mb-4 text-emerald-400 font-bold flex items-center gap-1.5" onClick={() => setSelectedId(null)}>
+                                             <ArrowLeft size={16}/> Back to Scenes
+                                         </button>
+                                         <SceneEditor key={selectedId} scene={props.scenes.find(s => s.id === selectedId)!} allScenes={props.scenes} allBattles={props.battles} allMaps={props.maps} characters={props.characters} chapters={props.chapters} worldInfo={props.worldInfo} assets={props.assets} onChange={(u) => props.onUpdateScenes(props.scenes.map(x => x.id === selectedId ? { ...x, ...u } : x))} onDelete={() => { props.onUpdateScenes(props.scenes.filter(x => x.id !== selectedId)); setSelectedId(null); }} />
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                )}
+                    );
+                })()}
                 
                 {tab === 'maps' && (
                      <div className="flex flex-col md:flex-row h-full gap-4 md:gap-6">
-                        <div className={`w-full md:w-1/3 border-none md:border-r border-gray-800 pb-4 md:pb-0 md:pr-4 overflow-y-auto ${selectedId ? 'hidden md:block' : 'block'}`}>
+                        <div className={`w-full ${isSubSidebarOpen ? 'md:w-1/3' : 'md:w-0 md:hidden'} border-none md:border-r border-gray-800 pb-4 md:pb-0 md:pr-4 overflow-y-auto ${selectedId ? 'hidden md:block' : 'block'}`}>
+                            <div className="flex justify-between items-center mb-3">
+                                <h2 className="text-lg font-bold text-white flex items-center gap-2"><MapIcon size={18}/> Maps</h2>
+                                <button onClick={() => setIsSubSidebarOpen(false)} className="hidden md:flex text-gray-400 hover:text-white p-1 rounded hover:bg-gray-800 transition-colors" title="Karten-Liste einklappen">
+                                    <ChevronLeft size={18}/>
+                                </button>
+                            </div>
                              <Button className="w-full mb-4 py-1.5 text-sm" onClick={() => { const id = crypto.randomUUID(); props.onUpdateMaps([...props.maps, { id, name: 'New Map', backgroundSrc: null, spots: [] }]); setSelectedId(id); }}><Plus size={14}/> Add Map</Button>
                              <div className="space-y-2">{props.maps.map(m => (<div key={m.id} onClick={() => setSelectedId(m.id)} className={`p-2 md:p-3 rounded cursor-pointer border text-sm ${selectedId === m.id ? 'bg-emerald-900/50 border-emerald-500' : 'bg-gray-900 border-gray-800 hover:bg-gray-800'}`}><div className="font-bold text-white">{m.name}</div></div>))}</div>
                         </div>
                         <div className={`flex-1 overflow-y-auto ${!selectedId ? 'hidden md:block' : 'block'}`}>
+                            {!isSubSidebarOpen && (
+                                <button onClick={() => setIsSubSidebarOpen(true)} className="hidden md:inline-flex mb-3 text-xs text-emerald-400 bg-gray-900 border border-gray-800 hover:bg-gray-800 px-2.5 py-1.5 rounded-lg items-center gap-1.5 font-medium transition-colors shadow-sm" title="Karten-Liste ausklappen">
+                                    <ChevronRight size={16}/> Karten-Liste anzeigen
+                                </button>
+                            )}
                             {selectedId && props.maps.find(m => m.id === selectedId) && (
                                 <div className="flex flex-col h-full">
                                     <button className="md:hidden mb-4 text-emerald-400 font-bold flex items-center gap-1.5" onClick={() => setSelectedId(null)}>
                                         <ArrowLeft size={16}/> Back to Maps
                                     </button>
-                                    <MapEditor key={selectedId} map={props.maps.find(m => m.id === selectedId)!} scenes={props.scenes} characters={props.characters} battles={props.battles} allMaps={props.maps} onChange={(u) => props.onUpdateMaps(props.maps.map(x => x.id === selectedId ? { ...x, ...u } : x))} onDelete={() => { props.onUpdateMaps(props.maps.filter(x => x.id !== selectedId)); setSelectedId(null); }} />
+                                    <MapEditor key={selectedId} map={props.maps.find(m => m.id === selectedId)!} scenes={props.scenes} characters={props.characters} battles={props.battles} allMaps={props.maps} assets={props.assets} onChange={(u) => props.onUpdateMaps(props.maps.map(x => x.id === selectedId ? { ...x, ...u } : x))} onDelete={() => { props.onUpdateMaps(props.maps.filter(x => x.id !== selectedId)); setSelectedId(null); }} />
                                 </div>
                             )}
                         </div>
@@ -2003,20 +2981,46 @@ export const Editor: React.FC<EditorProps> = (props) => {
                 )}
                 {tab === 'battles' && (
                      <div className="flex flex-col md:flex-row h-full gap-4 md:gap-6">
-                        <div className={`w-full md:w-1/3 border-none md:border-r border-gray-800 pb-4 md:pb-0 md:pr-4 overflow-y-auto ${selectedId ? 'hidden md:block' : 'block'}`}>
+                        <div className={`w-full ${isSubSidebarOpen ? 'md:w-1/3' : 'md:w-0 md:hidden'} border-none md:border-r border-gray-800 pb-4 md:pb-0 md:pr-4 overflow-y-auto ${selectedId ? 'hidden md:block' : 'block'}`}>
+                            <div className="flex justify-between items-center mb-3">
+                                <h2 className="text-lg font-bold text-white flex items-center gap-2"><Target size={18}/> Battles</h2>
+                                <button onClick={() => setIsSubSidebarOpen(false)} className="hidden md:flex text-gray-400 hover:text-white p-1 rounded hover:bg-gray-800 transition-colors" title="Kampf-Liste einklappen">
+                                    <ChevronLeft size={18}/>
+                                </button>
+                            </div>
                              <Button className="w-full mb-4 py-1.5 text-sm" onClick={() => { const id = crypto.randomUUID(); props.onUpdateBattles([...props.battles, { id, name: 'New Battle', backgroundSrc: null, playerCharacterIds: [], enemyCharacterIds: [], isRepeatable: false }]); setSelectedId(id); }}><Plus size={14}/> Add Battle</Button>
                              <div className="space-y-2">{props.battles.map(b => (<div key={b.id} onClick={() => setSelectedId(b.id)} className={`p-2 md:p-3 rounded cursor-pointer border text-sm ${selectedId === b.id ? 'bg-emerald-900/50 border-emerald-500' : 'bg-gray-900 border-gray-800 hover:bg-gray-800'}`}><div className="font-bold text-white">{b.name}</div></div>))}</div>
                         </div>
                         <div className={`flex-1 overflow-y-auto ${!selectedId ? 'hidden md:block' : 'block'}`}>
+                            {!isSubSidebarOpen && (
+                                <button onClick={() => setIsSubSidebarOpen(true)} className="hidden md:inline-flex mb-3 text-xs text-emerald-400 bg-gray-900 border border-gray-800 hover:bg-gray-800 px-2.5 py-1.5 rounded-lg items-center gap-1.5 font-medium transition-colors shadow-sm" title="Kampf-Liste ausklappen">
+                                    <ChevronRight size={16}/> Kampf-Liste anzeigen
+                                </button>
+                            )}
                             {selectedId && props.battles.find(b => b.id === selectedId) && (
                                 <div className="flex flex-col h-full">
                                     <button className="md:hidden mb-4 text-emerald-400 font-bold flex items-center gap-1.5" onClick={() => setSelectedId(null)}>
                                         <ArrowLeft size={16}/> Back to Battles
                                     </button>
-                                    <BattleEditor key={selectedId} battle={props.battles.find(b => b.id === selectedId)!} characters={props.characters} chapters={props.chapters} allScenes={props.scenes} allBattles={props.battles} allMaps={props.maps} onChange={(u) => props.onUpdateBattles(props.battles.map(x => x.id === selectedId ? { ...x, ...u } : x))} onDelete={() => { props.onUpdateBattles(props.battles.filter(x => x.id !== selectedId)); setSelectedId(null); }} />
+                                    <BattleEditor key={selectedId} battle={props.battles.find(b => b.id === selectedId)!} characters={props.characters} chapters={props.chapters} allScenes={props.scenes} allBattles={props.battles} allMaps={props.maps} assets={props.assets} onChange={(u) => props.onUpdateBattles(props.battles.map(x => x.id === selectedId ? { ...x, ...u } : x))} onDelete={() => { props.onUpdateBattles(props.battles.filter(x => x.id !== selectedId)); setSelectedId(null); }} />
                                 </div>
                             )}
                         </div>
+                    </div>
+                )}
+                {tab === 'assets' && (
+                    <div className="h-full overflow-hidden flex flex-col">
+                        <AssetManager
+                            assets={props.assets || []}
+                            characters={props.characters}
+                            scenes={props.scenes}
+                            maps={props.maps}
+                            worldInfo={props.worldInfo}
+                            onUpdateAssets={props.onUpdateAssets || (() => {})}
+                            onUpdateCharacters={props.onUpdateCharacters}
+                            onUpdateScenes={props.onUpdateScenes}
+                            onUpdateMaps={props.onUpdateMaps}
+                        />
                     </div>
                 )}
                 </div>

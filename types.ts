@@ -52,12 +52,19 @@ export interface CombatStats {
     weapon: WeaponConfig;
 }
 
+export type CharacterImportance = 'main' | 'side';
+export type CharacterAlignment = 'gut' | 'boese' | 'neutral';
+
 export interface Character {
   id: string;
   name: string;
   defaultDescription: string;
   lore?: string;
   aiImagePrompt?: string; // New field for ComfyUI generation
+  
+  // Categorization & Structure
+  importance?: CharacterImportance;
+  alignment?: CharacterAlignment;
   
   // Visuals
   rpgColor: string;
@@ -116,7 +123,10 @@ export interface Character {
 export interface Scene {
   id: string;
   chapterId?: string;
+  mapId?: string; // Mapped WorldMap ID
   name: string;
+  order?: number; // Order within the chapter
+  isMainScene?: boolean; // true = Hauptszene (Story), false = Nebenszene (Optional)
   
   locationName?: string; 
   backgroundSrc: string | null; 
@@ -201,6 +211,7 @@ export interface Chapter {
   id: string;
   name: string;
   description: string;
+  order?: number; // Chronological chapter number / position
 }
 
 export interface MapSpot {
@@ -246,6 +257,7 @@ export interface StoryLogEntry {
 
 export interface RPGState {
     currentMapId: string;
+    currentChapterId?: string;
     completedSceneIds: string[];
     completedBattleIds: string[];
     unlockedIds: string[];
@@ -272,3 +284,35 @@ export interface GameSaveData {
 }
 
 export type Zone = 'head' | 'torso' | 'arm' | 'leg';
+
+// ==================== ASSET LIBRARY TYPES ====================
+export type AssetCategory = 'maps' | 'scene_bg' | 'characters';
+
+export interface CharacterAssetMeta {
+  alignment?: 'gut' | 'neutral' | 'boese' | string;
+  species?: 'mensch' | 'furry' | 'anthro' | 'modifiziert' | string;
+  gender?: 'maennlich' | 'weiblich' | 'diverse' | string;
+  archetype?: 'adel' | 'buerger' | 'arm' | 'ritter' | 'magier' | 'soeldner' | string;
+}
+
+export interface LocationAssetMeta {
+  environment?: 'indoor' | 'outdoor' | 'dungeon' | string;
+  tags: string[];
+}
+
+export interface AssetItem {
+  id: string;
+  name: string;
+  category: AssetCategory;
+  fileUrl: string | null; // Image/Audio ID or DataURL in IndexedDB
+  assetType?: 'image' | 'audio';
+  characterMeta?: CharacterAssetMeta;
+  locationMeta?: LocationAssetMeta;
+  assignedTo?: {
+    type: 'character_idle' | 'character_emotion' | 'character_sprite' | 'scene_bg' | 'map_bg';
+    targetId: string;
+    targetName?: string;
+    emotionName?: string;
+  };
+  createdAt: number;
+}
