@@ -151,7 +151,83 @@ function extractJson(rawText: string): string {
   return cleaned.trim();
 }
 
-async function callLLM(worldInfo: WorldInfo | undefined, prompt: string, schema: Schema, defaultGeminiModel: string) {
+function toOllamaJsonSchema(schema: any): any {
+  if (!schema || typeof schema !== 'object') return {};
+
+  const result: any = {};
+
+  if (schema.type) {
+    result.type = String(schema.type).toLowerCase();
+  }
+
+  if (schema.description) {
+    result.description = schema.description;
+  }
+
+  if (Array.isArray(schema.enum)) {
+    result.enum = schema.enum;
+  }
+
+  if (schema.properties && typeof schema.properties === 'object') {
+    result.properties = {};
+    for (const [key, prop] of Object.entries(schema.properties)) {
+      result.properties[key] = toOllamaJsonSchema(prop);
+    }
+  }
+
+  if (Array.isArray(schema.required)) {
+    result.required = schema.required;
+  }
+
+  if (schema.items) {
+    result.items = toOllamaJsonSchema(schema.items);
+  }
+
+  return result;
+}
+
+function validateAndSanitizeGameTurnResponse(
+  rawJson: any,
+  activeCharacterIds: string[]
+): AIResponse | null {
+  if (!rawJson || typeof rawJson !== 'object') return null;
+  if (!Array.isArray(rawJson.characterResponses)) return null;
+
+  const allowedSet = new Set([...activeCharacterIds, 'narrator', 'system']);
+  const validEmotions = new Set<string>(EMOTION_ENUM as readonly string[]);
+
+  const validResponses: any[] = [];
+
+  for (const item of rawJson.characterResponses) {
+    if (!item || typeof item !== 'object') continue;
+    if (typeof item.characterId !== 'string' || !allowedSet.has(item.characterId)) continue;
+    if (typeof item.text !== 'string' || !item.text.trim()) continue;
+
+    const emotion = (typeof item.emotion === 'string' && validEmotions.has(item.emotion))
+      ? item.emotion
+      : 'idle';
+
+    validResponses.push({
+      ...item,
+      emotion
+    });
+  }
+
+  if (validResponses.length === 0) return null;
+
+  return {
+    ...rawJson,
+    characterResponses: validResponses
+  };
+}
+
+async function callLLM(
+    worldInfo: WorldInfo | undefined,
+    prompt: string,
+    schema: Schema,
+    defaultGeminiModel: string,
+    useStrictFormat: boolean = false
+) {
     const isOllama = worldInfo?.llmProvider === 'ollama';
 
     const fetchResponse = async (currentPrompt: string) => {
@@ -159,8 +235,13 @@ async function callLLM(worldInfo: WorldInfo | undefined, prompt: string, schema:
             const url = (worldInfo?.ollamaUrl || 'http://localhost:11434').replace(/\/$/, '');
             const model = worldInfo?.llmModel || 'llama3';
             
-            const ollamaPrompt = currentPrompt + `\n\nCRITICAL: You must output strictly valid JSON matching this schema:\n${JSON.stringify(schema, null, 2)}`;
-            
+            const promptNotice = useStrictFormat
+                ? `\n\nCRITICAL: You must output strictly valid JSON matching this schema:\n${JSON.stringify(schema, null, 2)}`
+                : `\n\nCRITICAL: You must output strictly valid JSON matching this schema. Respond ONLY with the JSON object, without explanations, without markdown codeblocks:\n${JSON.stringify(schema, null, 2)}`;
+
+            const ollamaPrompt = currentPrompt + promptNotice;
+            const ollamaFormat = useStrictFormat ? toOllamaJsonSchema(schema) : 'json';
+
             const res = await fetch(`${url}/api/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -168,7 +249,12 @@ async function callLLM(worldInfo: WorldInfo | undefined, prompt: string, schema:
                     model: model,
                     prompt: ollamaPrompt,
                     stream: false,
-                    format: 'json'
+                    format: ollamaFormat,
+                    options: {
+                        num_ctx: worldInfo?.ollamaNumCtx || 8192,
+                        temperature: worldInfo?.ollamaTemperature ?? 0.8,
+                        repeat_penalty: worldInfo?.ollamaRepeatPenalty ?? 1.1
+                    }
                 })
             });
             
@@ -299,7 +385,7 @@ export const generateSceneSummary = async (
     `;
 
     try {
-        const { json } = await callLLM(worldInfo, prompt, SUMMARY_SCHEMA, "gemini-3.5-flash");
+        const { json } = await callLLM(worldInfo, prompt, SUMMARY_SCHEMA, "gemini-3.5-flash", true);
         return json.summary || "No summary available.";
     } catch (e) {
         console.error("Summary Generation Failed", e);
@@ -355,7 +441,7 @@ export const generateAutoScene = async (
         const allCharacterIds = allCharacters.map(c => c.id);
         const sceneGenSchema = buildSceneGenSchema(allCharacterIds);
 
-        const { json } = await callLLM(worldInfo, prompt, sceneGenSchema, "gemini-3.5-flash");
+        const { json } = await callLLM(worldInfo, prompt, sceneGenSchema, "gemini-3.5-flash", true);
         return json;
     } catch (e) {
         console.error("Scene Generation Failed", e);
@@ -497,6 +583,11 @@ Antworte AUSSCHLIESSLICH mit den kommagetrennten Tags, ohne Erklärungen, ohne A
                 model: model,
                 prompt: prompt,
                 stream: false,
+                options: {
+                    num_ctx: worldInfo?.ollamaNumCtx || 8192,
+                    temperature: worldInfo?.ollamaTemperature ?? 0.8,
+                    repeat_penalty: worldInfo?.ollamaRepeatPenalty ?? 1.1
+                }
             })
         });
         if (!res.ok) throw new Error("Ollama Error");
@@ -766,9 +857,30 @@ export const generateGameTurn = async (
     const activeCharacterIds = activeChars.map(c => c!.id);
     const responseSchema = buildResponseSchema(activeCharacterIds);
 
-    const { json, tokenStats } = await callLLM(worldInfo, fullPrompt, responseSchema, "gemini-3.5-flash");
+    const { json, tokenStats } = await callLLM(worldInfo, fullPrompt, responseSchema, "gemini-3.5-flash", false);
     
-    return { ...json, tokenStats } as AIResponse;
+    let validated = validateAndSanitizeGameTurnResponse(json, activeCharacterIds);
+
+    if (!validated) {
+      console.warn("generateGameTurn: Empty or hallucinated characterResponses. Executing 1 re-prompt...");
+      const rePromptText = `${fullPrompt}\n\nYour previous response contained no visible dialogue. Respond with at least one characterResponse with non-empty text.`;
+      
+      const retryResult = await callLLM(worldInfo, rePromptText, responseSchema, "gemini-3.5-flash", false);
+      validated = validateAndSanitizeGameTurnResponse(retryResult.json, activeCharacterIds);
+
+      if (validated) {
+        const combinedStats = {
+          promptTokens: (tokenStats?.promptTokens || 0) + (retryResult.tokenStats?.promptTokens || 0),
+          completionTokens: (tokenStats?.completionTokens || 0) + (retryResult.tokenStats?.completionTokens || 0),
+          totalTokens: (tokenStats?.totalTokens || 0) + (retryResult.tokenStats?.totalTokens || 0)
+        };
+        return { ...validated, tokenStats: combinedStats } as AIResponse;
+      }
+    } else {
+      return { ...validated, tokenStats } as AIResponse;
+    }
+
+    throw new Error("Empty characterResponses after re-prompt.");
 
   } catch (error) {
     console.error("Gemini Error:", error);

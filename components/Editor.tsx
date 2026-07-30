@@ -2346,6 +2346,42 @@ export const Editor: React.FC<EditorProps> = (props) => {
                                         </div>
                                     )}
                                     {props.worldInfo.llmProvider === 'ollama' && (
+                                        <>
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-500 uppercase">Context Size (num_ctx)</label>
+                                                <input 
+                                                    type="number"
+                                                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white h-[42px] focus:border-emerald-500 outline-none"
+                                                    value={props.worldInfo.ollamaNumCtx ?? 8192}
+                                                    placeholder="8192"
+                                                    onChange={e => props.onUpdateWorldInfo({ ...props.worldInfo, ollamaNumCtx: parseInt(e.target.value, 10) || 8192 })}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-500 uppercase">Temperature</label>
+                                                <input 
+                                                    type="number"
+                                                    step="0.05"
+                                                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white h-[42px] focus:border-emerald-500 outline-none"
+                                                    value={props.worldInfo.ollamaTemperature ?? 0.8}
+                                                    placeholder="0.8"
+                                                    onChange={e => props.onUpdateWorldInfo({ ...props.worldInfo, ollamaTemperature: parseFloat(e.target.value) || 0.8 })}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-500 uppercase">Repeat Penalty</label>
+                                                <input 
+                                                    type="number"
+                                                    step="0.05"
+                                                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white h-[42px] focus:border-emerald-500 outline-none"
+                                                    value={props.worldInfo.ollamaRepeatPenalty ?? 1.1}
+                                                    placeholder="1.1"
+                                                    onChange={e => props.onUpdateWorldInfo({ ...props.worldInfo, ollamaRepeatPenalty: parseFloat(e.target.value) || 1.1 })}
+                                                />
+                                            </div>
+                                        </>
+                                    )}
+                                    {props.worldInfo.llmProvider === 'ollama' && (
                                         <div className="sm:col-span-2">
                                             <label className="text-xs font-bold text-gray-500 uppercase">Ollama URL</label>
                                             <input 

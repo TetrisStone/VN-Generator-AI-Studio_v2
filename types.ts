@@ -202,6 +202,9 @@ export interface WorldInfo {
   llmProvider?: 'gemini' | 'ollama';
   llmModel?: string;
   ollamaUrl?: string;
+  ollamaNumCtx?: number;
+  ollamaTemperature?: number;
+  ollamaRepeatPenalty?: number;
   comfyUrl?: string;
   comfyEnabled?: boolean;
   comfyWorkflow?: string;
