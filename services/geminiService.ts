@@ -103,51 +103,164 @@ function buildSceneGenSchema(allCharacterIds: string[]): Schema {
   };
 }
 
+function extractJson(rawText: string): string {
+  if (!rawText) return "";
+
+  // 1. Remove <think>...</think> reasoning blocks (e.g. from Ollama DeepSeek/Qwen models)
+  let cleaned = rawText.replace(/<think>[\s\S]*?<\/think>/gi, "");
+
+  // 2. Extract content from markdown codeblock if present (```json ... ``` or ``` ... ```)
+  const codeBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (codeBlockMatch) {
+    cleaned = codeBlockMatch[1];
+  }
+
+  // 3. Remove everything before first '{' or '[' and after last '}' or ']'
+  const firstObj = cleaned.indexOf('{');
+  const firstArr = cleaned.indexOf('[');
+  let first = -1;
+  if (firstObj !== -1 && firstArr !== -1) {
+    first = Math.min(firstObj, firstArr);
+  } else {
+    first = firstObj !== -1 ? firstObj : firstArr;
+  }
+
+  const lastObj = cleaned.lastIndexOf('}');
+  const lastArr = cleaned.lastIndexOf(']');
+  let last = -1;
+  if (lastObj !== -1 && lastArr !== -1) {
+    last = Math.max(lastObj, lastArr);
+  } else {
+    last = lastObj !== -1 ? lastObj : lastArr;
+  }
+
+  if (first !== -1 && last !== -1 && last >= first) {
+    cleaned = cleaned.slice(first, last + 1);
+  }
+
+  // 4. Remove line comments starting with //
+  cleaned = cleaned.replace(/^\s*\/\/.*$/gm, "");
+
+  // 5. Remove trailing commas before } or ]
+  let prev = "";
+  while (prev !== cleaned) {
+    prev = cleaned;
+    cleaned = cleaned.replace(/,(\s*[\}\]])/g, "$1");
+  }
+
+  return cleaned.trim();
+}
+
 async function callLLM(worldInfo: WorldInfo | undefined, prompt: string, schema: Schema, defaultGeminiModel: string) {
     const isOllama = worldInfo?.llmProvider === 'ollama';
-    if (isOllama) {
-        const url = (worldInfo?.ollamaUrl || 'http://localhost:11434').replace(/\/$/, '');
-        const model = worldInfo?.llmModel || 'llama3';
-        
-        let ollamaPrompt = prompt + `\n\nCRITICAL: You must output strictly valid JSON matching this schema:\n${JSON.stringify(schema, null, 2)}`;
-        
-        const res = await fetch(`${url}/api/generate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model: model,
-                prompt: ollamaPrompt,
-                stream: false,
-                format: 'json'
-            })
-        });
-        
-        if (!res.ok) {
-            throw new Error(`Ollama Error: ${res.statusText}`);
+
+    const fetchResponse = async (currentPrompt: string) => {
+        if (isOllama) {
+            const url = (worldInfo?.ollamaUrl || 'http://localhost:11434').replace(/\/$/, '');
+            const model = worldInfo?.llmModel || 'llama3';
+            
+            const ollamaPrompt = currentPrompt + `\n\nCRITICAL: You must output strictly valid JSON matching this schema:\n${JSON.stringify(schema, null, 2)}`;
+            
+            const res = await fetch(`${url}/api/generate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: model,
+                    prompt: ollamaPrompt,
+                    stream: false,
+                    format: 'json'
+                })
+            });
+            
+            if (!res.ok) {
+                throw new Error(`Ollama Error: ${res.statusText}`);
+            }
+            
+            const data = await res.json();
+            const tokenStats = {
+                promptTokens: data.prompt_eval_count || 0,
+                completionTokens: data.eval_count || 0,
+                totalTokens: (data.prompt_eval_count || 0) + (data.eval_count || 0)
+            };
+            
+            return { rawText: data.response || "", tokenStats };
+        } else {
+            const response = await fetch("/api/gemini/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ prompt: currentPrompt, schema, defaultGeminiModel, worldInfo })
+            });
+            
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.error || `Server Error: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            return { parsedJson: data.json, tokenStats: data.tokenStats };
         }
-        
-        const data = await res.json();
-        
-        const tokenStats = {
-            promptTokens: data.prompt_eval_count || 0,
-            completionTokens: data.eval_count || 0,
-            totalTokens: (data.prompt_eval_count || 0) + (data.eval_count || 0)
-        };
-        
-        return { json: JSON.parse(data.response), tokenStats };
-    } else {
-        const response = await fetch("/api/gemini/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ prompt, schema, defaultGeminiModel, worldInfo })
-        });
-        
-        if (!response.ok) {
-            const errData = await response.json().catch(() => ({}));
-            throw new Error(errData.error || `Server Error: ${response.statusText}`);
+    };
+
+    // --- PARSE ATTEMPT 1 ---
+    let responseData;
+    try {
+        responseData = await fetchResponse(prompt);
+    } catch (networkErr: any) {
+        // Direct network or HTTP error from server/Ollama -> rethrow immediately
+        throw networkErr;
+    }
+
+    let firstRawText = "";
+    let firstErrorMsg = "";
+
+    try {
+        if (responseData.parsedJson !== undefined) {
+            if (typeof responseData.parsedJson === 'object' && responseData.parsedJson !== null) {
+                return { json: responseData.parsedJson, tokenStats: responseData.tokenStats };
+            }
+            firstRawText = typeof responseData.parsedJson === 'string' ? responseData.parsedJson : JSON.stringify(responseData.parsedJson);
+        } else {
+            firstRawText = responseData.rawText || "";
         }
-        
-        return await response.json();
+
+        const cleanedText = extractJson(firstRawText);
+        const parsedObj = JSON.parse(cleanedText);
+        return { json: parsedObj, tokenStats: responseData.tokenStats };
+    } catch (err: any) {
+        firstErrorMsg = err?.message || String(err);
+        console.warn("callLLM: Parse Attempt 1 failed:", firstErrorMsg);
+    }
+
+    // --- RETRY (EXACTLY ONE RETRY ON PARSE FAILURE) ---
+    const retryPrompt = `${prompt}
+
+---
+PREVIOUS INVALID RESPONSE:
+${firstRawText}
+
+PARSING ERROR:
+${firstErrorMsg}
+
+Your previous response was not valid JSON. Respond ONLY with the corrected JSON object, without explanations, without markdown.`;
+
+    try {
+        const retryResponseData = await fetchResponse(retryPrompt);
+        let retryRawText = "";
+        if (retryResponseData.parsedJson !== undefined) {
+            if (typeof retryResponseData.parsedJson === 'object' && retryResponseData.parsedJson !== null) {
+                return { json: retryResponseData.parsedJson, tokenStats: retryResponseData.tokenStats };
+            }
+            retryRawText = typeof retryResponseData.parsedJson === 'string' ? retryResponseData.parsedJson : JSON.stringify(retryResponseData.parsedJson);
+        } else {
+            retryRawText = retryResponseData.rawText || "";
+        }
+
+        const cleanedRetryText = extractJson(retryRawText);
+        const parsedRetryObj = JSON.parse(cleanedRetryText);
+        return { json: parsedRetryObj, tokenStats: retryResponseData.tokenStats };
+    } catch (retryErr: any) {
+        console.error("callLLM: Retry attempt failed:", retryErr);
+        throw new Error(`Failed to parse valid JSON from LLM after retry: ${retryErr?.message || retryErr}`);
     }
 }
 
