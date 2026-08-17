@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Scene, Character, ChatMessage, GameState, GameSaveData, Chapter, WorldInfo, CharacterEmotion } from '../types';
-import { generateGameTurn, generateImagePromptContext } from '../services/geminiService';
+import { generateGameTurn, generateImagePromptContext, selectRelevantLore } from '../services/geminiService';
 import { Button } from './ui/Button';
 import { ArrowLeft, RefreshCw, Send, Save, Map, CheckCircle, Play, MapPin, Heart, SkipForward, Target, Cpu, Sparkles, XCircle, Loader2, User, Image as ImageIcon } from 'lucide-react';
 import { AsyncImage } from './ui/AsyncImage';
@@ -38,6 +38,10 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
   const [showDevTools, setShowDevTools] = useState(false);
   const [showGoalPopover, setShowGoalPopover] = useState(false);
   const [lastTokenStats, setLastTokenStats] = useState<{promptTokens?: number, completionTokens?: number, totalTokens?: number} | null>(null);
+  
+  // AI Lore Router State
+  const [prefetchedLoreIds, setPrefetchedLoreIds] = useState<string[]>([]);
+  const [isRoutingLore, setIsRoutingLore] = useState(false);
 
   // Notifications for Relationship Updates
   const [notifications, setNotifications] = useState<{ id: string, text: string, type: 'good' | 'bad' }[]>([]);
@@ -116,28 +120,70 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
     }
   }, [state.history]);
 
-  // Initial greeting from System/Narrator when scene starts (only if history is empty)
+  // Initial greeting from System/Narrator and AI Lore Router when scene starts
   useEffect(() => {
     if (!currentScene) return;
 
+    setGoalReached(false);
+    setGoalReason(null);
+    setPrefetchedLoreIds([]);
+
     // Check for Intro Video
-    // Only play if there is no history yet (fresh entry to scene) OR allow replay?
-    // Usually only on fresh entry.
     if (state.history.length === 0 && currentScene.introVideoSrc) {
         setPlayingVideo(true);
     } else {
         setPlayingVideo(false);
     }
 
-    if (state.history.length > 0) return;
-    setState(prev => ({
-      ...prev,
-      history: [{
-        sender: 'system',
-        text: currentScene.description,
-        timestamp: Date.now(),
-      }]
-    }));
+    if (state.history.length === 0) {
+      setState(prev => ({
+        ...prev,
+        history: [{
+          sender: 'system',
+          text: currentScene.description,
+          timestamp: Date.now(),
+        }]
+      }));
+    }
+
+    // Trigger AI Lore Relevance Router in Background
+    const allFactions = worldInfo?.factions || [];
+    const allLocations = worldInfo?.loreLocations || [];
+
+    if (allFactions.length > 0 || allLocations.length > 0) {
+      setIsRoutingLore(true);
+      const activeChars = currentScene.characters.map(sc => {
+        const baseChar = characters.find(c => c.id === sc.characterId);
+        return {
+          name: baseChar?.name || 'Unbekannt',
+          defaultDescription: baseChar?.defaultDescription || '',
+        };
+      });
+
+      selectRelevantLore({
+        sceneName: currentScene.name,
+        sceneDescription: currentScene.description,
+        sceneGoal: currentScene.goal,
+        sceneAiInstructions: currentScene.aiInstructions,
+        activeCharacters: activeChars,
+        allFactions,
+        allLocations,
+        worldInfo,
+      })
+        .then(selectedIds => {
+          console.log("[Lore Router] Scoped Lore IDs for scene:", selectedIds);
+          setPrefetchedLoreIds(selectedIds);
+          setIsRoutingLore(false);
+        })
+        .catch(err => {
+          console.warn("[Lore Router] Prefetch failed, fallback to keyword scoring:", err);
+          setPrefetchedLoreIds([]);
+          setIsRoutingLore(false);
+        });
+    } else {
+      setPrefetchedLoreIds([]);
+      setIsRoutingLore(false);
+    }
   }, [state.currentSceneIndex, currentScene]); // Trigger when index changes
 
   const addNotification = (text: string, type: 'good' | 'bad') => {
@@ -173,7 +219,8 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
         characters,
         worldInfo,
         currentChapter,
-        initialState?.rpgState?.storyLog || [] // PASS STORY HISTORY HERE
+        initialState?.rpgState?.storyLog || [], // PASS STORY HISTORY HERE
+        prefetchedLoreIds
       );
 
       const validEmotions: CharacterEmotion[] = ['idle','happy','angry','thoughtful','shy','sad','shocked','worried','lustful'];
@@ -379,17 +426,86 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
 
           {/* Dev Tools Panel */}
           {showDevTools && (
-             <div className="bg-black/90 backdrop-blur-md border border-emerald-500/30 p-3 rounded-xl min-w-[200px] text-xs font-mono text-gray-300 shadow-xl animate-in fade-in slide-in-from-left-4">
-                <div className="font-bold text-emerald-400 mb-2 border-b border-emerald-500/30 pb-1">Token Usage (Last Turn)</div>
-                {lastTokenStats ? (
-                  <div className="flex flex-col gap-1">
-                     <div className="flex justify-between"><span>Prompt:</span> <span>{lastTokenStats.promptTokens || 0}</span></div>
-                     <div className="flex justify-between"><span>Completion:</span> <span>{lastTokenStats.completionTokens || 0}</span></div>
-                     <div className="flex justify-between border-t border-gray-700/50 pt-1 mt-1 font-bold text-emerald-300"><span>Total:</span> <span>{lastTokenStats.totalTokens || 0}</span></div>
-                  </div>
-                ) : (
-                  <div className="text-gray-500 italic">No data yet. Send a message!</div>
-                )}
+             <div className="bg-black/90 backdrop-blur-md border border-emerald-500/30 p-3 rounded-xl min-w-[240px] max-w-[320px] text-xs font-mono text-gray-300 shadow-xl animate-in fade-in slide-in-from-left-4 flex flex-col gap-3">
+                <div>
+                   <div className="font-bold text-emerald-400 mb-1.5 border-b border-emerald-500/30 pb-1 flex justify-between items-center">
+                      <span>Token Usage (Last Turn)</span>
+                      <span className="text-[10px] text-emerald-300/80 font-normal">
+                         {worldInfo?.llmProvider === 'openai' ? 'OpenAI Router' : worldInfo?.llmProvider === 'ollama' ? 'Ollama' : 'Gemini'}
+                      </span>
+                   </div>
+                   {lastTokenStats ? (
+                     <div className="flex flex-col gap-1">
+                        <div className="flex justify-between"><span>Prompt:</span> <span>{lastTokenStats.promptTokens || 0}</span></div>
+                        <div className="flex justify-between"><span>Completion:</span> <span>{lastTokenStats.completionTokens || 0}</span></div>
+                        <div className="flex justify-between border-t border-gray-700/50 pt-1 mt-1 font-bold text-emerald-300"><span>Total:</span> <span>{lastTokenStats.totalTokens || 0}</span></div>
+                     </div>
+                   ) : (
+                     <div className="text-gray-500 italic">No data yet. Send a message!</div>
+                   )}
+                </div>
+
+                <div>
+                   <div className="font-bold text-emerald-400 mb-1.5 border-b border-emerald-500/30 pb-1 flex justify-between items-center">
+                      <span>Lore Sources</span>
+                      {isRoutingLore && <span className="text-[10px] text-yellow-400 animate-pulse">Routing...</span>}
+                   </div>
+                   
+                   {/* Manual & AI Scoped Lore */}
+                   {(() => {
+                      const manualFactions = (worldInfo?.factions || []).filter(f => (currentScene.relevantFactionIds || []).includes(f.id));
+                      const manualLocations = (worldInfo?.loreLocations || []).filter(l => (currentScene.relevantLocationIds || []).includes(l.id));
+                      const aiFactions = (worldInfo?.factions || []).filter(f => prefetchedLoreIds.includes(f.id) && !(currentScene.relevantFactionIds || []).includes(f.id));
+                      const aiLocations = (worldInfo?.loreLocations || []).filter(l => prefetchedLoreIds.includes(l.id) && !(currentScene.relevantLocationIds || []).includes(l.id));
+
+                      const hasManual = manualFactions.length > 0 || manualLocations.length > 0;
+                      const hasAI = aiFactions.length > 0 || aiLocations.length > 0;
+
+                      if (!hasManual && !hasAI && !isRoutingLore) {
+                         return <div className="text-gray-500 italic text-[11px]">Fallback: Dynamisches Keyword-Scoring aktiv</div>;
+                      }
+
+                      return (
+                         <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                            {hasManual && (
+                               <div>
+                                  <div className="text-[10px] text-blue-400 font-bold uppercase tracking-wider mb-0.5">Manuell gescopt:</div>
+                                  <div className="flex flex-wrap gap-1">
+                                     {manualFactions.map(f => (
+                                        <span key={f.id} className="bg-blue-950/80 border border-blue-600/50 text-blue-200 text-[10px] px-1.5 py-0.5 rounded">
+                                           {f.name} (Fraktion)
+                                        </span>
+                                     ))}
+                                     {manualLocations.map(l => (
+                                        <span key={l.id} className="bg-blue-950/80 border border-blue-600/50 text-blue-200 text-[10px] px-1.5 py-0.5 rounded">
+                                           {l.name} (Ort)
+                                        </span>
+                                     ))}
+                                  </div>
+                               </div>
+                            )}
+
+                            {hasAI && (
+                               <div>
+                                  <div className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider mb-0.5">KI-Router gewählt:</div>
+                                  <div className="flex flex-wrap gap-1">
+                                     {aiFactions.map(f => (
+                                        <span key={f.id} className="bg-emerald-950/80 border border-emerald-600/50 text-emerald-200 text-[10px] px-1.5 py-0.5 rounded">
+                                           {f.name}
+                                        </span>
+                                     ))}
+                                     {aiLocations.map(l => (
+                                        <span key={l.id} className="bg-emerald-950/80 border border-emerald-600/50 text-emerald-200 text-[10px] px-1.5 py-0.5 rounded">
+                                           {l.name}
+                                        </span>
+                                     ))}
+                                  </div>
+                               </div>
+                            )}
+                         </div>
+                      );
+                   })()}
+                </div>
              </div>
           )}
 
@@ -432,10 +548,24 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
                    <p className="text-xs text-gray-200 leading-relaxed">
                       {currentScene.goal || 'Kein bestimmtes Ziel angegeben.'}
                    </p>
-                   {goalReached && goalReason && (
-                      <div className="mt-2 pt-2 border-t border-emerald-500/20 text-[11px] text-emerald-300 italic">
-                         ✓ Erreicht: {goalReason}
-                      </div>
+                   {goalReached ? (
+                      goalReason && (
+                         <div className="mt-2 pt-2 border-t border-emerald-500/20 text-[11px] text-emerald-300 italic">
+                            ✓ Erreicht: {goalReason}
+                         </div>
+                      )
+                   ) : (
+                      currentScene.goal && (
+                         <button 
+                            onClick={() => {
+                               setGoalReached(true);
+                               setGoalReason("Manuell als erreicht markiert.");
+                            }}
+                            className="mt-2.5 w-full py-1 px-2.5 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-600/50 rounded-lg text-[11px] font-medium flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-95"
+                         >
+                            <CheckCircle size={13} /> Als erreicht markieren
+                         </button>
+                      )
                    )}
                 </div>
              )}

@@ -1,6 +1,6 @@
 
 import { Type, Schema } from "@google/genai";
-import { Scene, Character, ChatMessage, AIResponse, WorldInfo, Chapter, StoryLogEntry, SceneCharacterConfig } from "../types";
+import { Scene, Character, ChatMessage, AIResponse, WorldInfo, Chapter, StoryLogEntry, SceneCharacterConfig, Faction, WorldLocation } from "../types";
 
 export const EMOTION_ENUM = ['idle', 'happy', 'angry', 'thoughtful', 'shy', 'sad', 'shocked', 'worried', 'lustful'] as const;
 
@@ -51,11 +51,11 @@ function buildResponseSchema(activeCharacterIds: string[]): Schema {
       },
       sceneGoalReached: {
         type: Type.BOOLEAN,
-        description: "True ONLY if the specific win condition is met. If no win condition is provided, this MUST be false.",
+        description: "Set to TRUE if the player has achieved, fulfilled, or completed the scene's goal/win condition. Set to FALSE if the goal is not yet achieved or if there is no goal.",
       },
       sceneTransitionReason: {
         type: Type.STRING,
-        description: "Brief explanation if the scene is ending.",
+        description: "Brief explanation if the scene goal is reached or scene is ending.",
       },
     },
     required: ["characterResponses", "sceneGoalReached"],
@@ -66,9 +66,49 @@ function buildResponseSchema(activeCharacterIds: string[]): Schema {
 const SUMMARY_SCHEMA: Schema = {
     type: Type.OBJECT,
     properties: {
-        summary: { type: Type.STRING, description: "A concise summary (3-5 sentences) of the events, key decisions, and outcome of the scene." }
+        summary: { type: Type.STRING, description: "A concise summary (3-5 sentences) of the events, key decisions, and outcome of the scene." },
+        importance: { 
+            type: Type.STRING, 
+            enum: ['critical', 'major', 'minor'],
+            description: "Importance level: 'critical' for irreversible key events/twists/milestones, 'major' for relationship changes/key player choices/important revelations, 'minor' for atmospheric/casual scenes."
+        },
+        tags: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+            description: "1-4 tags selected ONLY from: 'conflict', 'romance', 'revelation', 'promise', 'betrayal', 'alliance', 'discovery', 'loss', 'humor', 'milestone'."
+        },
+        referencedCharacterIds: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+            description: "IDs of present characters mentioned by name or playing a central role in the summary."
+        }
     },
-    required: ["summary"]
+    required: ["summary", "importance", "tags", "referencedCharacterIds"]
+};
+
+// Schema for Lore Teaser Generation
+const TEASER_SCHEMA: Schema = {
+    type: Type.OBJECT,
+    properties: {
+        teaser: { 
+            type: Type.STRING, 
+            description: "Ein prägnanter Satz (max. 200 Zeichen), der den Lore-Eintrag zusammenfasst." 
+        }
+    },
+    required: ["teaser"]
+};
+
+// Schema for Lore Relevance Router
+const LORE_ROUTER_SCHEMA: Schema = {
+    type: Type.OBJECT,
+    properties: {
+        selectedIds: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+            description: "Liste der IDs aller relevanten Fraktionen und Lore-Orte für diese Szene."
+        }
+    },
+    required: ["selectedIds"]
 };
 
 function buildSceneGenSchema(allCharacterIds: string[]): Schema {
@@ -215,9 +255,14 @@ function validateAndSanitizeGameTurnResponse(
 
   if (validResponses.length === 0) return null;
 
+  const rawGoalReached = rawJson.sceneGoalReached ?? rawJson.goalReached ?? rawJson.isGoalReached ?? rawJson.sceneGoalAchieved;
+  const isGoalReached = rawGoalReached === true || rawGoalReached === 'true' || rawGoalReached === 1 || rawGoalReached === '1';
+
   return {
     ...rawJson,
-    characterResponses: validResponses
+    characterResponses: validResponses,
+    sceneGoalReached: isGoalReached,
+    sceneTransitionReason: typeof rawJson.sceneTransitionReason === 'string' ? rawJson.sceneTransitionReason : (typeof rawJson.goalReason === 'string' ? rawJson.goalReason : undefined)
   };
 }
 
@@ -229,9 +274,65 @@ async function callLLM(
     useStrictFormat: boolean = false
 ) {
     const isOllama = worldInfo?.llmProvider === 'ollama';
+    const isOpenai = worldInfo?.llmProvider === 'openai';
 
     const fetchResponse = async (currentPrompt: string) => {
-        if (isOllama) {
+        if (isOpenai) {
+            const baseUrl = (worldInfo?.openaiBaseUrl || 'https://openrouter.ai/api/v1').replace(/\/$/, '');
+            const apiKey = worldInfo?.openaiApiKey?.trim() || '';
+            const model = worldInfo?.openaiModel?.trim() || 'nous-hermes/llama-3.1-70b';
+
+            if (!apiKey) {
+                throw new Error("OpenAI/Router API-Key fehlt. Bitte konfiguriere deinen API-Key in den Model-Einstellungen im Editor.");
+            }
+
+            const promptWithSchema = currentPrompt + '\n\nCRITICAL: You must output strictly valid JSON matching this schema:\n' + JSON.stringify(schema, null, 2);
+
+            const res = await fetch(`${baseUrl}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: model,
+                    messages: [
+                        { role: 'system', content: 'You are a helpful assistant. Respond strictly in JSON format.' },
+                        { role: 'user', content: promptWithSchema }
+                    ],
+                    response_format: { type: 'json_object' },
+                    temperature: 0.8
+                })
+            });
+
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                const errDetail = errData.error?.message || errData.message || res.statusText;
+                if (res.status === 401) {
+                    throw new Error(`Ungültiger API-Key (401 Unauthorized): ${errDetail}. Bitte überprüfe deinen OpenAI/Router API-Key.`);
+                }
+                if (res.status === 403) {
+                    throw new Error(`Zugriff verweigert (403 Forbidden): ${errDetail}. Bitte überprüfe die Berechtigungen deines API-Keys.`);
+                }
+                throw new Error(`OpenAI/Router API-Fehler (${res.status}): ${errDetail}`);
+            }
+
+            const data = await res.json();
+            const choice = data.choices?.[0];
+            const content = choice?.message?.content || "";
+
+            const promptTokens = data.usage?.prompt_tokens || 0;
+            const completionTokens = data.usage?.completion_tokens || 0;
+            const totalTokens = data.usage?.total_tokens || (promptTokens + completionTokens);
+
+            const tokenStats = {
+                promptTokens,
+                completionTokens,
+                totalTokens
+            };
+
+            return { rawText: content, tokenStats };
+        } else if (isOllama) {
             const url = (worldInfo?.ollamaUrl || 'http://localhost:11434').replace(/\/$/, '');
             const model = worldInfo?.llmModel || 'llama3';
             
@@ -350,15 +451,25 @@ Your previous response was not valid JSON. Respond ONLY with the corrected JSON 
     }
 }
 
+export interface SceneSummaryResult {
+    summary: string;
+    importance: 'critical' | 'major' | 'minor';
+    tags: string[];
+    referencedCharacterIds: string[];
+}
+
 export const generateSceneSummary = async (
     scene: Scene,
     characters: Character[],
     history: ChatMessage[],
     worldInfo?: WorldInfo
-): Promise<string> => {
-    // Identify characters by name for the prompt
-    const charNames = scene.characters
-        .map(sc => characters.find(c => c.id === sc.characterId)?.name)
+): Promise<SceneSummaryResult> => {
+    // Identify characters by ID & name for the prompt
+    const sceneCharsWithIds = scene.characters
+        .map(sc => {
+            const char = characters.find(c => c.id === sc.characterId);
+            return char ? `[ID: ${char.id}] ${char.name}` : null;
+        })
         .filter(Boolean)
         .join(", ");
 
@@ -372,24 +483,52 @@ export const generateSceneSummary = async (
     const prompt = `
         Task: Summarize the following Visual Novel scene for a persistent Story Log.
         Scene Name: ${scene.name}
-        Location: ${scene.locationName}
-        Characters Present: ${charNames}
+        Location: ${scene.locationName || 'Unknown'}
+        Characters Present: ${sceneCharsWithIds}
 
         Conversation History:
         ${chatLog}
 
         Instructions:
-        - Write a concise summary (3-5 sentences).
-        - Focus on what happened, what information was revealed, and any major decisions made by the player.
-        - Write in past tense.
+        - Write a concise summary (3-5 sentences) in past tense focusing on what happened, key information revealed, and major player decisions.
+        - Determine 'importance':
+          * 'critical' ONLY for: irreversible events (death, betrayal, major revelation, quest completion, broken/given promise).
+          * 'major' for: relationship changes, key player decisions, new relevant information.
+          * 'minor' for: atmospheric or casual scenes without lasting consequences.
+          * When in doubt, prefer one tier higher rather than lower.
+        - Select 1-4 'tags' strictly from this fixed vocabulary: 'conflict', 'romance', 'revelation', 'promise', 'betrayal', 'alliance', 'discovery', 'loss', 'humor', 'milestone'. Do NOT invent any other tags.
+        - Select 'referencedCharacterIds': Choose from the IDs of the present characters ([ID: ...]) those who are mentioned by name in the summary or whose actions are central.
     `;
 
     try {
-        const { json } = await callLLM(worldInfo, prompt, SUMMARY_SCHEMA, "gemini-3.5-flash", true);
-        return json.summary || "No summary available.";
+        const { json } = await callLLM(worldInfo, prompt, SUMMARY_SCHEMA, "gemini-3.6-flash", true);
+
+        const validImportance = (['critical', 'major', 'minor'].includes(json?.importance)) ? json.importance : 'major';
+        
+        const allowedTags = new Set(['conflict', 'romance', 'revelation', 'promise', 'betrayal', 'alliance', 'discovery', 'loss', 'humor', 'milestone']);
+        const validTags = Array.isArray(json?.tags)
+            ? json.tags.filter((t: any) => typeof t === 'string' && allowedTags.has(t))
+            : [];
+            
+        const sceneCharIds = new Set(scene.characters.map(sc => sc.characterId));
+        const validRefIds = Array.isArray(json?.referencedCharacterIds)
+            ? json.referencedCharacterIds.filter((id: any) => typeof id === 'string' && sceneCharIds.has(id))
+            : [];
+
+        return {
+            summary: typeof json?.summary === 'string' && json.summary.trim() ? json.summary : "No summary available.",
+            importance: validImportance,
+            tags: validTags,
+            referencedCharacterIds: validRefIds
+        };
     } catch (e) {
         console.error("Summary Generation Failed", e);
-        return "Summary generation failed.";
+        return {
+            summary: "Summary generation failed.",
+            importance: 'major',
+            tags: [],
+            referencedCharacterIds: []
+        };
     }
 };
 
@@ -441,11 +580,116 @@ export const generateAutoScene = async (
         const allCharacterIds = allCharacters.map(c => c.id);
         const sceneGenSchema = buildSceneGenSchema(allCharacterIds);
 
-        const { json } = await callLLM(worldInfo, prompt, sceneGenSchema, "gemini-3.5-flash", true);
+        const { json } = await callLLM(worldInfo, prompt, sceneGenSchema, "gemini-3.6-flash", true);
         return json;
     } catch (e) {
         console.error("Scene Generation Failed", e);
         throw e;
+    }
+};
+
+export const generateLoreTeaser = async (
+    name: string,
+    description: string,
+    worldInfo?: WorldInfo
+): Promise<string> => {
+    const prompt = `Fasse den folgenden Lore-Eintrag in EINEM Satz zusammen (max. 200 Zeichen). Der Satz soll die Kernidentität und Relevanz für Rollenspiel-Szenen erfassen.
+
+NAME: ${name}
+BESCHREIBUNG: ${description}
+
+Antworte NUR mit dem JSON-Objekt im vorgegebenen Format.`;
+
+    try {
+        const { json } = await callLLM(worldInfo, prompt, TEASER_SCHEMA, "gemini-3.6-flash", true);
+        const teaser = typeof json?.teaser === 'string' ? json.teaser.trim() : '';
+        return teaser.length > 250 ? teaser.slice(0, 200) + '...' : teaser;
+    } catch (err) {
+        console.error("generateLoreTeaser failed:", err);
+        throw err;
+    }
+};
+
+export interface LoreRouterInput {
+    sceneName: string;
+    sceneDescription: string;
+    sceneGoal?: string;
+    sceneAiInstructions?: string;
+    activeCharacters: { name: string; defaultDescription?: string }[];
+    allFactions: Faction[];
+    allLocations: WorldLocation[];
+    worldInfo?: WorldInfo;
+}
+
+export const selectRelevantLore = async (
+    input: LoreRouterInput
+): Promise<string[]> => {
+    const {
+        sceneName,
+        sceneDescription,
+        sceneGoal,
+        sceneAiInstructions,
+        activeCharacters,
+        allFactions,
+        allLocations,
+        worldInfo,
+    } = input;
+
+    const validFactionMap = new Map(allFactions.map(f => [f.id, f]));
+    const validLocationMap = new Map(allLocations.map(l => [l.id, l]));
+
+    const factionEntries = allFactions.map(f => {
+        const snippet = f.teaser && f.teaser.trim().length > 0 
+            ? f.teaser.trim() 
+            : (f.description || '').slice(0, 200).trim();
+        return `- [ID: "${f.id}"] ${f.name} (Fraktion): ${snippet}`;
+    });
+
+    const locationEntries = allLocations.map(l => {
+        const snippet = l.teaser && l.teaser.trim().length > 0 
+            ? l.teaser.trim() 
+            : (l.description || '').slice(0, 200).trim();
+        return `- [ID: "${l.id}"] ${l.name} (Ort): ${snippet}`;
+    });
+
+    const allEntriesText = [...factionEntries, ...locationEntries].join('\n');
+    if (!allEntriesText.trim()) {
+        return [];
+    }
+
+    const charDetails = activeCharacters
+        .map(c => `- ${c.name}: ${c.defaultDescription || 'Keine Beschreibung'}`)
+        .join('\n');
+
+    const prompt = `Wähle alle Lore-Einträge, die für das Rollenspiel in dieser Szene relevant sein könnten. Berücksichtige Synonyme, indirekte Bezüge und historische Hintergründe der anwesenden Charaktere. Im Zweifel nimm einen Eintrag auf. Antworte NUR mit dem JSON.
+
+SZENE:
+- Name: ${sceneName}
+- Beschreibung: ${sceneDescription || 'Keine Angabe'}
+${sceneGoal ? `- Ziel: ${sceneGoal}` : ''}
+${sceneAiInstructions ? `- Anweisungen: ${sceneAiInstructions}` : ''}
+
+ANWESENDE CHARAKTERE:
+${charDetails || 'Keine spezifischen Charaktere'}
+
+VERFÜGBARE LORE-EINTRÄGE (Wähle passende IDs aus dieser Liste):
+${allEntriesText}
+
+Gib die Liste der ausgewählten IDs in "selectedIds" zurück.`;
+
+    try {
+        const { json } = await callLLM(worldInfo, prompt, LORE_ROUTER_SCHEMA, "gemini-3.6-flash", true);
+        const rawIds = Array.isArray(json?.selectedIds) ? json.selectedIds : [];
+        
+        // Filter and sanitize: keep ONLY IDs that exist in allFactions or allLocations
+        const validIds = rawIds.filter((id: any) => 
+            typeof id === 'string' && (validFactionMap.has(id) || validLocationMap.has(id))
+        );
+
+        return validIds;
+    } catch (err) {
+        console.error("selectRelevantLore failed:", err);
+        throw err;
     }
 };
 
@@ -572,7 +816,31 @@ Antworte AUSSCHLIESSLICH mit den kommagetrennten Tags, ohne Erklärungen, ohne A
 
   try {
     const isOllama = worldInfo?.llmProvider === 'ollama';
-    if (isOllama) {
+    const isOpenai = worldInfo?.llmProvider === 'openai';
+    if (isOpenai) {
+        const baseUrl = (worldInfo?.openaiBaseUrl || 'https://openrouter.ai/api/v1').replace(/\/$/, '');
+        const apiKey = worldInfo?.openaiApiKey?.trim() || '';
+        const model = worldInfo?.openaiModel?.trim() || 'nous-hermes/llama-3.1-70b';
+        if (!apiKey) return "";
+
+        const res = await fetch(`${baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+                model: model,
+                messages: [
+                    { role: 'user', content: prompt }
+                ],
+                temperature: 0.8
+            })
+        });
+        if (!res.ok) throw new Error("OpenAI API Error");
+        const data = await res.json();
+        return (data.choices?.[0]?.message?.content || "").trim();
+    } else if (isOllama) {
         const url = (worldInfo?.ollamaUrl || 'http://localhost:11434').replace(/\/$/, '');
         const model = worldInfo?.llmModel || 'llama3';
         
@@ -597,7 +865,7 @@ Antworte AUSSCHLIESSLICH mit den kommagetrennten Tags, ohne Erklärungen, ohne A
         const response = await fetch("/api/gemini/generateText", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ prompt, defaultGeminiModel: "gemini-3.5-flash", worldInfo })
+            body: JSON.stringify({ prompt, defaultGeminiModel: "gemini-3.6-flash", worldInfo })
         });
         if (!response.ok) throw new Error("Gemini API Error");
         const data = await response.json();
@@ -616,7 +884,8 @@ export const generateGameTurn = async (
   allCharacters: Character[],
   worldInfo?: WorldInfo,
   chapter?: Chapter,
-  storyLog: StoryLogEntry[] = [] // New Parameter
+  storyLog: StoryLogEntry[] = [], // New Parameter
+  prefetchedLoreIds?: string[]
 ): Promise<AIResponse> => {
   // 1. Construct the Context
   const activeChars = scene.characters.map(sc => {
@@ -663,109 +932,138 @@ export const generateGameTurn = async (
   const hasSpecificGoal = scene.goal && scene.goal.trim().length > 0;
   
   const goalInstruction = hasSpecificGoal 
-    ? `WIN CONDITION / GOAL: ${scene.goal}
-       CRITICAL: Evaluate if this specific "WIN CONDITION" has been met by the user's actions or words. If yes, set 'sceneGoalReached' to true.`
-    : `WIN CONDITION: NONE / SANDBOX. 
-       CRITICAL: This is an open-ended roleplay. Do NOT set 'sceneGoalReached' to true under any circumstances. The player will exit manually when they are done.`;
+    ? `SCENE GOAL / WIN CONDITION: "${scene.goal}"
+       CRITICAL DIRECTIVE ON SCENE GOAL:
+       - You MUST evaluate after every player turn whether the player has satisfied, fulfilled, or achieved this specific Goal: "${scene.goal}".
+       - If the goal IS ACHIEVED (e.g., through dialogue, agreement, action, combat, or key decision), set "sceneGoalReached": true and provide a short reason in "sceneTransitionReason".
+       - Do NOT be overly strict. If the player or characters have reasonably accomplished what the goal asked for, set "sceneGoalReached": true.`
+    : `SCENE GOAL / WIN CONDITION: NONE (Open Sandbox Roleplay).
+       - Always set "sceneGoalReached": false.`;
 
   // --- World Building Context ---
   let worldContext = '';
   if (worldInfo) {
     worldContext += `WORLD VIEW / GLOBAL SETTING:\n${worldInfo.description}\n\n`;
     
-    // --- SMART LORE SCOPING & DYNAMIC EXTRACTION ENGINE ---
-    const recentHistoryText = history.slice(-5).map(msg => msg.text).join(' ');
-    const contextStringToSearch = `${currentInput} ${scene.name} ${scene.locationName || ''} ${scene.description} ${recentHistoryText}`;
-    const cleanedContextWords = contextStringToSearch
-      .toLowerCase()
-      .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?\"]/g, " ")
-      .split(/\s+/)
-      .filter(w => w.length > 3);
+    // Check if pre-fetched Lore IDs from the AI Router are present and non-empty
+    if (prefetchedLoreIds && prefetchedLoreIds.length > 0) {
+      // KI-Router Mode: Combine manually scoped IDs with prefetched AI IDs and skip keyword scoring
+      console.log("[Lore Router] Using prefetched lore IDs:", prefetchedLoreIds);
+      
+      const allTargetFactionIds = Array.from(new Set([
+        ...(scene.relevantFactionIds || []),
+        ...prefetchedLoreIds
+      ]));
+      const allTargetLocationIds = Array.from(new Set([
+        ...(scene.relevantLocationIds || []),
+        ...prefetchedLoreIds
+      ]));
 
-    // 1. FACTION SCOPING & DYNAMIC SCANNING
-    const explicitlyScopedFactionIds = scene.relevantFactionIds || [];
-    const hasExplicitFactions = explicitlyScopedFactionIds.length > 0;
+      const factionsToLoad = (worldInfo.factions || []).filter(f => allTargetFactionIds.includes(f.id));
+      const locationsToLoad = (worldInfo.loreLocations || []).filter(l => allTargetLocationIds.includes(l.id));
 
-    let factionsToLoad: any[] = [];
-    let dynamicFactions: any[] = [];
+      if (factionsToLoad.length > 0) {
+        worldContext += `RELEVANT FACTIONS FOR THIS SCENE:\n${factionsToLoad.map(f => `- ${f.name}: ${f.description}`).join('\n')}\n\n`;
+      }
+      if (locationsToLoad.length > 0) {
+        worldContext += `RELEVANT LOCATIONS FOR THIS SCENE:\n${locationsToLoad.map(l => `- ${l.name}: ${l.description}`).join('\n')}\n\n`;
+      }
+    } else {
+      // Fallback: Keyword-Scoring Engine
+      console.log("[Lore Router] Fallback: Keyword-Scoring verwendet");
+      const recentHistoryText = history.slice(-5).map(msg => msg.text).join(' ');
+      const contextStringToSearch = `${currentInput} ${scene.name} ${scene.locationName || ''} ${scene.description} ${recentHistoryText}`;
+      const cleanedContextWords = contextStringToSearch
+        .toLowerCase()
+        .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?\"]/g, " ")
+        .split(/\s+/)
+        .filter(w => w.length > 3);
 
-    if (worldInfo.factions && worldInfo.factions.length > 0) {
-      if (hasExplicitFactions) {
-        // Explizit ausgewählte Fraktionen immer laden
-        factionsToLoad = worldInfo.factions.filter(f => explicitlyScopedFactionIds.includes(f.id));
-        // Restliche Fraktionen auf dynamische Relevanz prüfen
-        const remainingFactions = worldInfo.factions.filter(f => !explicitlyScopedFactionIds.includes(f.id));
-        for (const f of remainingFactions) {
-          const score = calculateLoreScore(f.name, f.description, contextStringToSearch.toLowerCase(), cleanedContextWords);
-          if (score >= 10) {
-            dynamicFactions.push(f);
+      // 1. FACTION SCOPING & DYNAMIC SCANNING
+      const explicitlyScopedFactionIds = scene.relevantFactionIds || [];
+      const hasExplicitFactions = explicitlyScopedFactionIds.length > 0;
+
+      let factionsToLoad: any[] = [];
+      let dynamicFactions: any[] = [];
+
+      if (worldInfo.factions && worldInfo.factions.length > 0) {
+        if (hasExplicitFactions) {
+          // Explizit ausgewählte Fraktionen immer laden
+          factionsToLoad = worldInfo.factions.filter(f => explicitlyScopedFactionIds.includes(f.id));
+          // Restliche Fraktionen auf dynamische Relevanz prüfen
+          const remainingFactions = worldInfo.factions.filter(f => !explicitlyScopedFactionIds.includes(f.id));
+          for (const f of remainingFactions) {
+            const score = calculateLoreScore(f.name, f.description, contextStringToSearch.toLowerCase(), cleanedContextWords);
+            if (score >= 10) {
+              dynamicFactions.push(f);
+            }
+          }
+        } else {
+          // Keine explizite Auswahl getroffen -> Smart-Filter alle bzw. Fallback auf alle
+          const scoredFactions = worldInfo.factions.map(f => ({
+            faction: f,
+            score: calculateLoreScore(f.name, f.description, contextStringToSearch.toLowerCase(), cleanedContextWords)
+          }));
+          
+          const relevant = scoredFactions.filter(sf => sf.score >= 10).map(sf => sf.faction);
+          if (relevant.length > 0) {
+            factionsToLoad = relevant;
+          } else {
+            // Fallback: alle laden, wenn gar kein Match gefunden wurde
+            factionsToLoad = worldInfo.factions;
           }
         }
-      } else {
-        // Keine explizite Auswahl getroffen -> Smart-Filter alle bzw. Fallback auf alle
-        const scoredFactions = worldInfo.factions.map(f => ({
-          faction: f,
-          score: calculateLoreScore(f.name, f.description, contextStringToSearch.toLowerCase(), cleanedContextWords)
-        }));
-        
-        const relevant = scoredFactions.filter(sf => sf.score >= 10).map(sf => sf.faction);
-        if (relevant.length > 0) {
-          factionsToLoad = relevant;
-        } else {
-          // Fallback: alle laden, wenn gar kein Match gefunden wurde
-          factionsToLoad = worldInfo.factions;
-        }
       }
-    }
 
-    if (factionsToLoad && factionsToLoad.length > 0) {
-      worldContext += `RELEVANT FACTIONS FOR THIS SCENE:\n${factionsToLoad.map(f => `- ${f.name}: ${f.description}`).join('\n')}\n\n`;
-    }
-    if (dynamicFactions.length > 0) {
-      worldContext += `DYNAMICALLY DETECTED FACTIONS (Contextually Mentioned / Relevant):\n${dynamicFactions.map(f => `- ${f.name} (Detected via Synonym/Keyword): ${f.description}`).join('\n')}\n\n`;
-    }
-    
-    // 2. LOCATION SCOPING & DYNAMIC SCANNING
-    const explicitlyScopedLocationIds = scene.relevantLocationIds || [];
-    const hasExplicitLocations = explicitlyScopedLocationIds.length > 0;
+      if (factionsToLoad && factionsToLoad.length > 0) {
+        worldContext += `RELEVANT FACTIONS FOR THIS SCENE:\n${factionsToLoad.map(f => `- ${f.name}: ${f.description}`).join('\n')}\n\n`;
+      }
+      if (dynamicFactions.length > 0) {
+        worldContext += `DYNAMICALLY DETECTED FACTIONS (Contextually Mentioned / Relevant):\n${dynamicFactions.map(f => `- ${f.name} (Detected via Synonym/Keyword): ${f.description}`).join('\n')}\n\n`;
+      }
+      
+      // 2. LOCATION SCOPING & DYNAMIC SCANNING
+      const explicitlyScopedLocationIds = scene.relevantLocationIds || [];
+      const hasExplicitLocations = explicitlyScopedLocationIds.length > 0;
 
-    let locationsToLoad: any[] = [];
-    let dynamicLocations: any[] = [];
+      let locationsToLoad: any[] = [];
+      let dynamicLocations: any[] = [];
 
-    if (worldInfo.loreLocations && worldInfo.loreLocations.length > 0) {
-      if (hasExplicitLocations) {
-        // Explizit ausgewählte Orte immer laden
-        locationsToLoad = worldInfo.loreLocations.filter(l => explicitlyScopedLocationIds.includes(l.id));
-        // Restliche Orte auf dynamische Relevanz prüfen
-        const remainingLocations = worldInfo.loreLocations.filter(l => !explicitlyScopedLocationIds.includes(l.id));
-        for (const l of remainingLocations) {
-          const score = calculateLoreScore(l.name, l.description, contextStringToSearch.toLowerCase(), cleanedContextWords);
-          if (score >= 10) {
-            dynamicLocations.push(l);
+      if (worldInfo.loreLocations && worldInfo.loreLocations.length > 0) {
+        if (hasExplicitLocations) {
+          // Explizit ausgewählte Orte immer laden
+          locationsToLoad = worldInfo.loreLocations.filter(l => explicitlyScopedLocationIds.includes(l.id));
+          // Restliche Orte auf dynamische Relevanz prüfen
+          const remainingLocations = worldInfo.loreLocations.filter(l => !explicitlyScopedLocationIds.includes(l.id));
+          for (const l of remainingLocations) {
+            const score = calculateLoreScore(l.name, l.description, contextStringToSearch.toLowerCase(), cleanedContextWords);
+            if (score >= 10) {
+              dynamicLocations.push(l);
+            }
+          }
+        } else {
+          // Keine explizite Auswahl getroffen -> Smart-Filter alle bzw. Fallback auf alle
+          const scoredLocations = worldInfo.loreLocations.map(l => ({
+            location: l,
+            score: calculateLoreScore(l.name, l.description, contextStringToSearch.toLowerCase(), cleanedContextWords)
+          }));
+          
+          const relevant = scoredLocations.filter(sl => sl.score >= 10).map(sl => sl.location);
+          if (relevant.length > 0) {
+            locationsToLoad = relevant;
+          } else {
+            // Fallback: alle laden, wenn gar kein Match gefunden wurde
+            locationsToLoad = worldInfo.loreLocations;
           }
         }
-      } else {
-        // Keine explizite Auswahl getroffen -> Smart-Filter alle bzw. Fallback auf alle
-        const scoredLocations = worldInfo.loreLocations.map(l => ({
-          location: l,
-          score: calculateLoreScore(l.name, l.description, contextStringToSearch.toLowerCase(), cleanedContextWords)
-        }));
-        
-        const relevant = scoredLocations.filter(sl => sl.score >= 10).map(sl => sl.location);
-        if (relevant.length > 0) {
-          locationsToLoad = relevant;
-        } else {
-          // Fallback: alle laden, wenn gar kein Match gefunden wurde
-          locationsToLoad = worldInfo.loreLocations;
-        }
       }
-    }
 
-    if (locationsToLoad && locationsToLoad.length > 0) {
-      worldContext += `RELEVANT LOCATIONS FOR THIS SCENE:\n${locationsToLoad.map(l => `- ${l.name}: ${l.description}`).join('\n')}\n\n`;
-    }
-    if (dynamicLocations.length > 0) {
-      worldContext += `DYNAMICALLY DETECTED LOCATIONS (Contextually Mentioned / Relevant):\n${dynamicLocations.map(l => `- ${l.name} (Detected via Synonym/Keyword): ${l.description}`).join('\n')}\n\n`;
+      if (locationsToLoad && locationsToLoad.length > 0) {
+        worldContext += `RELEVANT LOCATIONS FOR THIS SCENE:\n${locationsToLoad.map(l => `- ${l.name}: ${l.description}`).join('\n')}\n\n`;
+      }
+      if (dynamicLocations.length > 0) {
+        worldContext += `DYNAMICALLY DETECTED LOCATIONS (Contextually Mentioned / Relevant):\n${dynamicLocations.map(l => `- ${l.name} (Detected via Synonym/Keyword): ${l.description}`).join('\n')}\n\n`;
+      }
     }
 
     if (worldInfo.systemInstruction) {
@@ -835,7 +1133,8 @@ export const generateGameTurn = async (
     2. Determine which character(s) should respond based on their personas, lore, relationship status, and the conversation flow. Multiple characters can speak in sequence.
     3. Use the internal environment and sensory details to respond more accurately.
     4. CHECK RELATIONSHIP TRIGGERS: If the relationship system is active for a character, check if the user's input triggers a value change.
-    5. Respond strictly in JSON.
+    5. EVALUATE SCENE GOAL / WIN CONDITION: Check if the Scene Goal ("${scene.goal || 'None'}") has been accomplished or satisfied by the player. If accomplished, YOU MUST SET "sceneGoalReached": true and explain in "sceneTransitionReason".
+    6. Respond strictly in JSON.
   `;
 
   // 2. Format History for Gemini
@@ -857,7 +1156,7 @@ export const generateGameTurn = async (
     const activeCharacterIds = activeChars.map(c => c!.id);
     const responseSchema = buildResponseSchema(activeCharacterIds);
 
-    const { json, tokenStats } = await callLLM(worldInfo, fullPrompt, responseSchema, "gemini-3.5-flash", false);
+    const { json, tokenStats } = await callLLM(worldInfo, fullPrompt, responseSchema, "gemini-3.6-flash", false);
     
     let validated = validateAndSanitizeGameTurnResponse(json, activeCharacterIds);
 
@@ -865,7 +1164,7 @@ export const generateGameTurn = async (
       console.warn("generateGameTurn: Empty or hallucinated characterResponses. Executing 1 re-prompt...");
       const rePromptText = `${fullPrompt}\n\nYour previous response contained no visible dialogue. Respond with at least one characterResponse with non-empty text.`;
       
-      const retryResult = await callLLM(worldInfo, rePromptText, responseSchema, "gemini-3.5-flash", false);
+      const retryResult = await callLLM(worldInfo, rePromptText, responseSchema, "gemini-3.6-flash", false);
       validated = validateAndSanitizeGameTurnResponse(retryResult.json, activeCharacterIds);
 
       if (validated) {

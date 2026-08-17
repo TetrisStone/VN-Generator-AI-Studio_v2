@@ -3,7 +3,7 @@ import { Character, CharacterImportance, CharacterAlignment, Scene, WorldMap, Ba
 import { Button } from './ui/Button';
 import { Trash, Sword, Scaling, Plus, Save, Play, Download, Upload, Monitor, Map as MapIcon, Users, Target, Book, Layout, MessageSquare, Unlock, Lock, Waypoints, Image as ImageIcon, XCircle, Terminal, MapPin, Heart, EyeOff, Video, Music, Sparkles, Loader2, ArrowLeft, Cpu, Check, FolderOpen, ChevronUp, ChevronDown, ExternalLink, X, Move, ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { CHARACTER_GROUPS, getCharacterGroupKey, getCharacterGroup, CharacterGroupKey } from '../utils/characterUtils';
-import { generateAutoScene } from '../services/geminiService';
+import { generateAutoScene, generateLoreTeaser } from '../services/geminiService';
 import { AsyncImage } from './ui/AsyncImage';
 import { AsyncVideo } from './ui/AsyncVideo';
 import { AssetManager } from './AssetManager';
@@ -2125,6 +2125,28 @@ export const Editor: React.FC<EditorProps> = (props) => {
     const [charSearch, setCharSearch] = useState('');
     const [charGroupFilter, setCharGroupFilter] = useState<'all' | CharacterGroupKey>('all');
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+    const [generatingTeaserId, setGeneratingTeaserId] = useState<string | null>(null);
+
+    const handleGenerateTeaser = async (type: 'location' | 'faction', item: WorldLocation | Faction, index: number) => {
+        if (!item.name && !item.description) return;
+        setGeneratingTeaserId(item.id);
+        try {
+            const teaser = await generateLoreTeaser(item.name, item.description, props.worldInfo);
+            if (type === 'location') {
+                const newLocs = [...props.worldInfo.loreLocations];
+                newLocs[index] = { ...item, teaser } as WorldLocation;
+                props.onUpdateWorldInfo({ ...props.worldInfo, loreLocations: newLocs });
+            } else {
+                const newFacs = [...props.worldInfo.factions];
+                newFacs[index] = { ...item, teaser } as Faction;
+                props.onUpdateWorldInfo({ ...props.worldInfo, factions: newFacs });
+            }
+        } catch (err) {
+            console.error("Failed to generate teaser:", err);
+        } finally {
+            setGeneratingTeaserId(null);
+        }
+    };
 
     const navItems: { id: typeof tab; label: string; icon: React.ReactNode }[] = [
         { id: 'home', label: 'Home Settings', icon: <Play size={16}/> },
@@ -2314,10 +2336,11 @@ export const Editor: React.FC<EditorProps> = (props) => {
                                         <select 
                                             className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white h-[42px] focus:border-emerald-500 outline-none"
                                             value={props.worldInfo.llmProvider || 'gemini'}
-                                            onChange={e => props.onUpdateWorldInfo({ ...props.worldInfo, llmProvider: e.target.value as 'gemini' | 'ollama' })}
+                                            onChange={e => props.onUpdateWorldInfo({ ...props.worldInfo, llmProvider: e.target.value as 'gemini' | 'ollama' | 'openai' })}
                                         >
                                             <option value="gemini">Gemini</option>
                                             <option value="ollama">Local (Ollama)</option>
+                                            <option value="openai">OpenAI Compatible (Router)</option>
                                         </select>
                                     </div>
                                     {(!props.worldInfo.llmProvider || props.worldInfo.llmProvider === 'gemini') && (
@@ -2332,6 +2355,52 @@ export const Editor: React.FC<EditorProps> = (props) => {
                                                 <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Preview)</option>
                                             </select>
                                         </div>
+                                    )}
+                                    {props.worldInfo.llmProvider === 'openai' && (
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Model Name</label>
+                                            <input 
+                                                type="text"
+                                                className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white h-[42px] focus:border-emerald-500 outline-none placeholder:text-gray-600"
+                                                value={props.worldInfo.openaiModel || ''}
+                                                placeholder="e.g. nous-hermes/llama-3.1-70b"
+                                                onChange={e => props.onUpdateWorldInfo({ ...props.worldInfo, openaiModel: e.target.value })}
+                                            />
+                                        </div>
+                                    )}
+                                    {props.worldInfo.llmProvider === 'openai' && (
+                                        <>
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-500 uppercase">API Key</label>
+                                                <input 
+                                                    type="password"
+                                                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white h-[42px] focus:border-emerald-500 outline-none placeholder:text-gray-600 font-mono text-xs"
+                                                    value={props.worldInfo.openaiApiKey || ''}
+                                                    placeholder="sk-or-v1-..."
+                                                    onChange={e => props.onUpdateWorldInfo({ ...props.worldInfo, openaiApiKey: e.target.value })}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-500 uppercase">Base URL</label>
+                                                <input 
+                                                    type="text"
+                                                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white h-[42px] focus:border-emerald-500 outline-none placeholder:text-gray-600 font-mono text-xs"
+                                                    value={props.worldInfo.openaiBaseUrl !== undefined ? props.worldInfo.openaiBaseUrl : 'https://openrouter.ai/api/v1'}
+                                                    placeholder="https://openrouter.ai/api/v1"
+                                                    onChange={e => props.onUpdateWorldInfo({ ...props.worldInfo, openaiBaseUrl: e.target.value })}
+                                                />
+                                            </div>
+                                            <div className="sm:col-span-2">
+                                                <p className="text-[11px] text-gray-400 bg-gray-950 p-2.5 rounded border border-gray-800">
+                                                    Works with OpenRouter, Requesty, NVIDIA NIM, or any OpenAI-compatible API.
+                                                </p>
+                                            </div>
+                                            {!props.worldInfo.openaiApiKey?.trim() && (
+                                                <div className="sm:col-span-2 text-[11px] text-amber-400 bg-amber-950/40 border border-amber-800/50 p-2 rounded">
+                                                    Hinweis: Bitte trage einen API-Key ein, um diesen Provider für LLM-Aufrufe zu nutzen.
+                                                </div>
+                                            )}
+                                        </>
                                     )}
                                     {props.worldInfo.llmProvider === 'ollama' && (
                                         <div>
@@ -2502,7 +2571,7 @@ export const Editor: React.FC<EditorProps> = (props) => {
                                  <div className="space-y-3">
                                      {props.worldInfo.loreLocations.length === 0 && <div className="text-gray-600 text-sm italic">No specific lore locations defined.</div>}
                                      {props.worldInfo.loreLocations.map((loc, i) => (
-                                         <div key={loc.id} className="bg-gray-900 border border-gray-700 rounded p-3 space-y-2 group">
+                                         <div key={loc.id} className="bg-gray-900 border border-gray-700 rounded p-3 space-y-2.5 group">
                                              <div className="flex justify-between items-center">
                                                  <input 
                                                     className="bg-transparent font-bold text-emerald-200 border-b border-transparent focus:border-emerald-500 outline-none text-sm w-full"
@@ -2529,6 +2598,43 @@ export const Editor: React.FC<EditorProps> = (props) => {
                                                     props.onUpdateWorldInfo({ ...props.worldInfo, loreLocations: newLocs });
                                                 }}
                                              />
+
+                                             {/* Teaser field for AI Lore Router */}
+                                             <div className="space-y-1 pt-1 border-t border-gray-800/60">
+                                                 <div className="flex justify-between items-center">
+                                                     <label className="text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1">
+                                                         <Sparkles size={11} className="text-emerald-400" /> Teaser (1 Satz für KI-Router)
+                                                     </label>
+                                                     <button
+                                                         type="button"
+                                                         disabled={generatingTeaserId === loc.id || (!loc.name && !loc.description)}
+                                                         onClick={() => handleGenerateTeaser('location', loc, i)}
+                                                         className="text-[10px] text-emerald-400 hover:text-emerald-300 disabled:text-gray-600 flex items-center gap-1 bg-emerald-950/60 hover:bg-emerald-900/60 border border-emerald-800/50 px-2 py-0.5 rounded transition-colors"
+                                                     >
+                                                         {generatingTeaserId === loc.id ? (
+                                                             <>
+                                                                 <Loader2 size={10} className="animate-spin" />
+                                                                 <span>Generiere...</span>
+                                                             </>
+                                                         ) : (
+                                                             <>
+                                                                 <Sparkles size={10} />
+                                                                 <span>Teaser generieren</span>
+                                                             </>
+                                                         )}
+                                                     </button>
+                                                 </div>
+                                                 <input 
+                                                     className="w-full bg-gray-800/80 text-emerald-100 text-xs p-2 rounded border border-gray-700 focus:border-emerald-500 outline-none placeholder:text-gray-600"
+                                                     placeholder="Prägnanter 1-Satz Teaser für die Relevanz-Erkennung..."
+                                                     value={loc.teaser || ''}
+                                                     onChange={(e) => {
+                                                         const newLocs = [...props.worldInfo.loreLocations];
+                                                         newLocs[i] = { ...loc, teaser: e.target.value };
+                                                         props.onUpdateWorldInfo({ ...props.worldInfo, loreLocations: newLocs });
+                                                     }}
+                                                 />
+                                             </div>
                                          </div>
                                      ))}
                                  </div>
@@ -2543,7 +2649,7 @@ export const Editor: React.FC<EditorProps> = (props) => {
                                  <div className="space-y-3">
                                      {props.worldInfo.factions.length === 0 && <div className="text-gray-600 text-sm italic">No groups defined.</div>}
                                      {props.worldInfo.factions.map((fac, i) => (
-                                         <div key={fac.id} className="bg-gray-900 border border-gray-700 rounded p-3 space-y-2 group">
+                                         <div key={fac.id} className="bg-gray-900 border border-gray-700 rounded p-3 space-y-2.5 group">
                                              <div className="flex justify-between items-center">
                                                  <input 
                                                     className="bg-transparent font-bold text-amber-200 border-b border-transparent focus:border-amber-500 outline-none text-sm w-full"
@@ -2570,6 +2676,43 @@ export const Editor: React.FC<EditorProps> = (props) => {
                                                     props.onUpdateWorldInfo({ ...props.worldInfo, factions: newFacs });
                                                 }}
                                              />
+
+                                             {/* Teaser field for AI Lore Router */}
+                                             <div className="space-y-1 pt-1 border-t border-gray-800/60">
+                                                 <div className="flex justify-between items-center">
+                                                     <label className="text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1">
+                                                         <Sparkles size={11} className="text-amber-400" /> Teaser (1 Satz für KI-Router)
+                                                     </label>
+                                                     <button
+                                                         type="button"
+                                                         disabled={generatingTeaserId === fac.id || (!fac.name && !fac.description)}
+                                                         onClick={() => handleGenerateTeaser('faction', fac, i)}
+                                                         className="text-[10px] text-amber-400 hover:text-amber-300 disabled:text-gray-600 flex items-center gap-1 bg-amber-950/60 hover:bg-amber-900/60 border border-amber-800/50 px-2 py-0.5 rounded transition-colors"
+                                                     >
+                                                         {generatingTeaserId === fac.id ? (
+                                                             <>
+                                                                 <Loader2 size={10} className="animate-spin" />
+                                                                 <span>Generiere...</span>
+                                                             </>
+                                                         ) : (
+                                                             <>
+                                                                 <Sparkles size={10} />
+                                                                 <span>Teaser generieren</span>
+                                                             </>
+                                                         )}
+                                                     </button>
+                                                 </div>
+                                                 <input 
+                                                     className="w-full bg-gray-800/80 text-amber-100 text-xs p-2 rounded border border-gray-700 focus:border-amber-500 outline-none placeholder:text-gray-600"
+                                                     placeholder="Prägnanter 1-Satz Teaser für die Relevanz-Erkennung..."
+                                                     value={fac.teaser || ''}
+                                                     onChange={(e) => {
+                                                         const newFacs = [...props.worldInfo.factions];
+                                                         newFacs[i] = { ...fac, teaser: e.target.value };
+                                                         props.onUpdateWorldInfo({ ...props.worldInfo, factions: newFacs });
+                                                     }}
+                                                 />
+                                             </div>
                                          </div>
                                      ))}
                                  </div>

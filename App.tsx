@@ -847,14 +847,17 @@ const App: React.FC = () => {
           setGeneratingSummary(true);
           // Only generate summary if it's the first completion OR repeatable?
           // Let's generate every time for now to keep a log of repeat visits.
-          const summaryText = await generateSceneSummary(activeScene, characters, history, worldInfo);
+          const summaryRes = await generateSceneSummary(activeScene, characters, history, worldInfo);
           
           const newEntry: StoryLogEntry = {
               id: crypto.randomUUID(),
               sceneName: activeScene.name,
               locationName: activeScene.locationName || 'Unknown',
               charactersInvolved: activeScene.characters.map(sc => characters.find(c => c.id === sc.characterId)?.name || '?'),
-              summary: summaryText,
+              summary: summaryRes.summary || "Summary generation failed.",
+              importance: summaryRes.importance || 'major',
+              tags: summaryRes.tags || [],
+              referencedCharacterIds: summaryRes.referencedCharacterIds || [],
               timestamp: Date.now()
           };
           

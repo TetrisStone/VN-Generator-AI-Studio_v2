@@ -4,6 +4,87 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 
+async function generateGeminiWithRetryAndFallback(
+  ai: GoogleGenAI,
+  {
+    requestedModel,
+    prompt,
+    config,
+  }: {
+    requestedModel: string;
+    prompt: string;
+    config: any;
+  }
+) {
+  // Candidate models sequence
+  const modelCandidates: string[] = [];
+
+  const cleanReqModel = (requestedModel || "").trim();
+  if (cleanReqModel && cleanReqModel.startsWith("gemini-")) {
+    modelCandidates.push(cleanReqModel);
+  }
+
+  // Standard fallback models in case requested model is unavailable (503) or rate limited (429)
+  const defaultFallbacks = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-flash-latest"];
+  for (const fb of defaultFallbacks) {
+    if (!modelCandidates.includes(fb)) {
+      modelCandidates.push(fb);
+    }
+  }
+
+  let lastError: any = null;
+
+  for (const modelCandidate of modelCandidates) {
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Gemini generateContent timeout for model ${modelCandidate}`)), 60000)
+        );
+
+        const resPromise = ai.models.generateContent({
+          model: modelCandidate,
+          contents: prompt,
+          config,
+        });
+
+        const geminiRes = (await Promise.race([resPromise, timeoutPromise])) as any;
+        return geminiRes;
+      } catch (err: any) {
+        lastError = err;
+        const errMessage = String(err?.message || err || "");
+        const errStatus = err?.status || err?.code || "";
+        const isTransient =
+          errMessage.includes("503") ||
+          errMessage.includes("UNAVAILABLE") ||
+          errMessage.includes("high demand") ||
+          errMessage.includes("RESOURCE_EXHAUSTED") ||
+          errMessage.includes("429") ||
+          errMessage.includes("overloaded") ||
+          errMessage.includes("timeout") ||
+          errMessage.includes("fetch failed") ||
+          errStatus === 503 ||
+          errStatus === 429 ||
+          errStatus === "UNAVAILABLE";
+
+        console.warn(
+          `[Gemini Server Proxy] Attempt ${attempt}/${maxAttempts} for model '${modelCandidate}' failed: ${errMessage}`
+        );
+
+        if (isTransient && attempt < maxAttempts) {
+          // Wait before retry
+          await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+        } else {
+          // Move on to next fallback model
+          break;
+        }
+      }
+    }
+  }
+
+  throw lastError || new Error("Gemini API call failed after retries on all fallback models.");
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -34,31 +115,24 @@ async function startServer() {
         },
       });
 
-      let model = worldInfo?.llmModel || defaultGeminiModel || "gemini-3.5-flash";
+      let model = worldInfo?.llmModel || defaultGeminiModel || "gemini-3.6-flash";
       const provider = worldInfo?.llmProvider || "gemini";
       
-      // Falls der Provider auf "gemini" eingestellt ist, aber das gespeicherte Modell ein Ollama-Modell ist (z.B. ein lokaler Name wie VladimirGav/...):
-      if (provider === "gemini" && !model.startsWith("gemini-")) {
-        console.warn(`Ungültiges Gemini-Modell "${model}" für Gemini-Provider erkannt. Fallback auf "gemini-3.5-flash" vorgenommen.`);
-        model = "gemini-3.5-flash";
+      if (provider === "gemini" && (!model || !model.startsWith("gemini-"))) {
+        console.warn(`Ungültiges Gemini-Modell "${model}" für Gemini-Provider erkannt. Fallback auf "gemini-3.6-flash" vorgenommen.`);
+        model = "gemini-3.6-flash";
       }
 
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Gemini generateContent hat nach 60 Sekunden das Zeitlimit überschritten.")), 60000)
-      );
-
-      // Execute content generation with the model and schema
-      const resPromise = ai.models.generateContent({
-        model: model,
-        contents: prompt,
+      // Execute content generation with retry & model fallback logic
+      const geminiRes = await generateGeminiWithRetryAndFallback(ai, {
+        requestedModel: model,
+        prompt,
         config: {
           responseMimeType: "application/json",
           responseSchema: schema,
           temperature: 1,
         },
       });
-
-      const geminiRes = await Promise.race([resPromise, timeoutPromise]) as any;
 
       // Extract usage token statistics
       const tokenStats = {
@@ -90,22 +164,22 @@ async function startServer() {
       }
 
       const ai = new GoogleGenAI({ apiKey });
-      let model = worldInfo?.llmModel || defaultGeminiModel || "gemini-3.5-flash";
+      let model = worldInfo?.llmModel || defaultGeminiModel || "gemini-3.6-flash";
       const provider = worldInfo?.llmProvider || "gemini";
 
-      if (provider === "gemini" && !model.startsWith("gemini-")) {
-        model = "gemini-3.5-flash";
+      if (provider === "gemini" && (!model || !model.startsWith("gemini-"))) {
+        model = "gemini-3.6-flash";
       }
 
-      const response = await ai.models.generateContent({
-        model: model,
-        contents: prompt,
+      const geminiRes = await generateGeminiWithRetryAndFallback(ai, {
+        requestedModel: model,
+        prompt,
         config: {
           temperature: 0.7,
         },
       });
 
-      res.json({ text: response.text || "" });
+      res.json({ text: geminiRes.text || "" });
     } catch (error: any) {
       console.error("Server-side Gemini proxy error:", error);
       res.status(500).json({ error: error.message || "Fehler bei der Textgenerierung." });

@@ -185,12 +185,14 @@ export interface Faction {
     id: string;
     name: string;
     description: string;
+    teaser?: string;
 }
 
 export interface WorldLocation {
     id: string;
     name: string;
     description: string;
+    teaser?: string;
 }
 
 export interface WorldInfo {
@@ -199,12 +201,15 @@ export interface WorldInfo {
   loreLocations: WorldLocation[];
   systemInstruction?: string;
   diceConfig?: { skins: Record<number, string[]> };
-  llmProvider?: 'gemini' | 'ollama';
+  llmProvider?: 'gemini' | 'ollama' | 'openai';
   llmModel?: string;
   ollamaUrl?: string;
   ollamaNumCtx?: number;
   ollamaTemperature?: number;
   ollamaRepeatPenalty?: number;
+  openaiApiKey?: string;
+  openaiBaseUrl?: string;
+  openaiModel?: string;
   comfyUrl?: string;
   comfyEnabled?: boolean;
   comfyWorkflow?: string;
@@ -256,6 +261,9 @@ export interface StoryLogEntry {
     charactersInvolved: string[]; // Names
     summary: string;
     timestamp: number;
+    importance?: 'critical' | 'major' | 'minor';
+    tags?: string[];
+    referencedCharacterIds?: string[];
 }
 
 export interface RPGState {
