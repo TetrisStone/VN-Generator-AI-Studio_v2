@@ -943,31 +943,35 @@ export const generateGameTurn = async (
   // --- World Building Context ---
   let worldContext = '';
   if (worldInfo) {
-    worldContext += `WORLD VIEW / GLOBAL SETTING:\n${worldInfo.description}\n\n`;
+    worldContext += `WORLD SETTING:\n${worldInfo.description}\n\n`;
     
+    type LoreItem = { name: string, text: string, type: 'faction'|'location', priority: number };
+    const allLore: LoreItem[] = [];
+
+    const getLoreText = (item: any) => item.teaser ? item.teaser : (item.description.substring(0, 150) + (item.description.length > 150 ? '...' : ''));
+
+    const explicitlyScopedFactionIds = scene.relevantFactionIds || [];
+    const explicitlyScopedLocationIds = scene.relevantLocationIds || [];
+
     // Check if pre-fetched Lore IDs from the AI Router are present and non-empty
     if (prefetchedLoreIds && prefetchedLoreIds.length > 0) {
-      // KI-Router Mode: Combine manually scoped IDs with prefetched AI IDs and skip keyword scoring
       console.log("[Lore Router] Using prefetched lore IDs:", prefetchedLoreIds);
-      
-      const allTargetFactionIds = Array.from(new Set([
-        ...(scene.relevantFactionIds || []),
-        ...prefetchedLoreIds
-      ]));
-      const allTargetLocationIds = Array.from(new Set([
-        ...(scene.relevantLocationIds || []),
-        ...prefetchedLoreIds
-      ]));
 
-      const factionsToLoad = (worldInfo.factions || []).filter(f => allTargetFactionIds.includes(f.id));
-      const locationsToLoad = (worldInfo.loreLocations || []).filter(l => allTargetLocationIds.includes(l.id));
+      (worldInfo.factions || []).forEach(f => {
+        if (explicitlyScopedFactionIds.includes(f.id)) {
+          allLore.push({ name: f.name, text: getLoreText(f), type: 'faction', priority: 1 });
+        } else if (prefetchedLoreIds.includes(f.id)) {
+          allLore.push({ name: f.name, text: getLoreText(f), type: 'faction', priority: 2 });
+        }
+      });
 
-      if (factionsToLoad.length > 0) {
-        worldContext += `RELEVANT FACTIONS FOR THIS SCENE:\n${factionsToLoad.map(f => `- ${f.name}: ${f.description}`).join('\n')}\n\n`;
-      }
-      if (locationsToLoad.length > 0) {
-        worldContext += `RELEVANT LOCATIONS FOR THIS SCENE:\n${locationsToLoad.map(l => `- ${l.name}: ${l.description}`).join('\n')}\n\n`;
-      }
+      (worldInfo.loreLocations || []).forEach(l => {
+        if (explicitlyScopedLocationIds.includes(l.id)) {
+          allLore.push({ name: l.name, text: getLoreText(l), type: 'location', priority: 1 });
+        } else if (prefetchedLoreIds.includes(l.id)) {
+          allLore.push({ name: l.name, text: getLoreText(l), type: 'location', priority: 2 });
+        }
+      });
     } else {
       // Fallback: Keyword-Scoring Engine
       console.log("[Lore Router] Fallback: Keyword-Scoring verwendet");
@@ -979,97 +983,69 @@ export const generateGameTurn = async (
         .split(/\s+/)
         .filter(w => w.length > 3);
 
-      // 1. FACTION SCOPING & DYNAMIC SCANNING
-      const explicitlyScopedFactionIds = scene.relevantFactionIds || [];
       const hasExplicitFactions = explicitlyScopedFactionIds.length > 0;
-
-      let factionsToLoad: any[] = [];
-      let dynamicFactions: any[] = [];
-
       if (worldInfo.factions && worldInfo.factions.length > 0) {
         if (hasExplicitFactions) {
-          // Explizit ausgewählte Fraktionen immer laden
-          factionsToLoad = worldInfo.factions.filter(f => explicitlyScopedFactionIds.includes(f.id));
-          // Restliche Fraktionen auf dynamische Relevanz prüfen
-          const remainingFactions = worldInfo.factions.filter(f => !explicitlyScopedFactionIds.includes(f.id));
-          for (const f of remainingFactions) {
-            const score = calculateLoreScore(f.name, f.description, contextStringToSearch.toLowerCase(), cleanedContextWords);
-            if (score >= 10) {
-              dynamicFactions.push(f);
+          worldInfo.factions.forEach(f => {
+            if (explicitlyScopedFactionIds.includes(f.id)) {
+              allLore.push({ name: f.name, text: getLoreText(f), type: 'faction', priority: 1 });
+            } else {
+              const score = calculateLoreScore(f.name, f.description, contextStringToSearch.toLowerCase(), cleanedContextWords);
+              if (score >= 10) allLore.push({ name: f.name, text: getLoreText(f), type: 'faction', priority: 3 });
             }
-          }
+          });
         } else {
-          // Keine explizite Auswahl getroffen -> Smart-Filter alle bzw. Fallback auf alle
-          const scoredFactions = worldInfo.factions.map(f => ({
-            faction: f,
-            score: calculateLoreScore(f.name, f.description, contextStringToSearch.toLowerCase(), cleanedContextWords)
-          }));
-          
-          const relevant = scoredFactions.filter(sf => sf.score >= 10).map(sf => sf.faction);
-          if (relevant.length > 0) {
-            factionsToLoad = relevant;
-          } else {
-            // Fallback: alle laden, wenn gar kein Match gefunden wurde
-            factionsToLoad = worldInfo.factions;
-          }
+          worldInfo.factions.forEach(f => {
+            const score = calculateLoreScore(f.name, f.description, contextStringToSearch.toLowerCase(), cleanedContextWords);
+            if (score >= 10) allLore.push({ name: f.name, text: getLoreText(f), type: 'faction', priority: 3 });
+          });
         }
-      }
-
-      if (factionsToLoad && factionsToLoad.length > 0) {
-        worldContext += `RELEVANT FACTIONS FOR THIS SCENE:\n${factionsToLoad.map(f => `- ${f.name}: ${f.description}`).join('\n')}\n\n`;
-      }
-      if (dynamicFactions.length > 0) {
-        worldContext += `DYNAMICALLY DETECTED FACTIONS (Contextually Mentioned / Relevant):\n${dynamicFactions.map(f => `- ${f.name} (Detected via Synonym/Keyword): ${f.description}`).join('\n')}\n\n`;
       }
       
-      // 2. LOCATION SCOPING & DYNAMIC SCANNING
-      const explicitlyScopedLocationIds = scene.relevantLocationIds || [];
       const hasExplicitLocations = explicitlyScopedLocationIds.length > 0;
-
-      let locationsToLoad: any[] = [];
-      let dynamicLocations: any[] = [];
-
       if (worldInfo.loreLocations && worldInfo.loreLocations.length > 0) {
         if (hasExplicitLocations) {
-          // Explizit ausgewählte Orte immer laden
-          locationsToLoad = worldInfo.loreLocations.filter(l => explicitlyScopedLocationIds.includes(l.id));
-          // Restliche Orte auf dynamische Relevanz prüfen
-          const remainingLocations = worldInfo.loreLocations.filter(l => !explicitlyScopedLocationIds.includes(l.id));
-          for (const l of remainingLocations) {
-            const score = calculateLoreScore(l.name, l.description, contextStringToSearch.toLowerCase(), cleanedContextWords);
-            if (score >= 10) {
-              dynamicLocations.push(l);
+          worldInfo.loreLocations.forEach(l => {
+            if (explicitlyScopedLocationIds.includes(l.id)) {
+              allLore.push({ name: l.name, text: getLoreText(l), type: 'location', priority: 1 });
+            } else {
+              const score = calculateLoreScore(l.name, l.description, contextStringToSearch.toLowerCase(), cleanedContextWords);
+              if (score >= 10) allLore.push({ name: l.name, text: getLoreText(l), type: 'location', priority: 3 });
             }
-          }
+          });
         } else {
-          // Keine explizite Auswahl getroffen -> Smart-Filter alle bzw. Fallback auf alle
-          const scoredLocations = worldInfo.loreLocations.map(l => ({
-            location: l,
-            score: calculateLoreScore(l.name, l.description, contextStringToSearch.toLowerCase(), cleanedContextWords)
-          }));
-          
-          const relevant = scoredLocations.filter(sl => sl.score >= 10).map(sl => sl.location);
-          if (relevant.length > 0) {
-            locationsToLoad = relevant;
-          } else {
-            // Fallback: alle laden, wenn gar kein Match gefunden wurde
-            locationsToLoad = worldInfo.loreLocations;
-          }
+          worldInfo.loreLocations.forEach(l => {
+            const score = calculateLoreScore(l.name, l.description, contextStringToSearch.toLowerCase(), cleanedContextWords);
+            if (score >= 10) allLore.push({ name: l.name, text: getLoreText(l), type: 'location', priority: 3 });
+          });
         }
       }
-
-      if (locationsToLoad && locationsToLoad.length > 0) {
-        worldContext += `RELEVANT LOCATIONS FOR THIS SCENE:\n${locationsToLoad.map(l => `- ${l.name}: ${l.description}`).join('\n')}\n\n`;
-      }
-      if (dynamicLocations.length > 0) {
-        worldContext += `DYNAMICALLY DETECTED LOCATIONS (Contextually Mentioned / Relevant):\n${dynamicLocations.map(l => `- ${l.name} (Detected via Synonym/Keyword): ${l.description}`).join('\n')}\n\n`;
-      }
     }
 
-    if (worldInfo.systemInstruction) {
-        worldContext += `SYSTEM DIRECTIVES (Must Follow):\n${worldInfo.systemInstruction}\n\n`;
+    // Sort and limit to 5
+    allLore.sort((a, b) => a.priority - b.priority);
+    const finalLore = allLore.slice(0, 5);
+
+    if (finalLore.length > 0) {
+      worldContext += `RELEVANT LORE (for this scene only):\n${finalLore.map(l => `- ${l.name}: ${l.text}`).join('\n')}\n\n`;
+    }
+
+    // DEBUG Logging
+    const tokenEstimate = Math.ceil(worldContext.length / 4);
+    const logDetails = finalLore.map(l => {
+      const source = l.priority === 1 ? 'manuell' : (l.priority === 2 ? 'KI' : 'Keyword');
+      return `${l.name} (${source})`;
+    }).join(', ');
+    
+    console.log(`[Lore Router] Geladene Lore: ${finalLore.length} Einträge (${logDetails}). Geschätzte Tokens im worldContext: ${tokenEstimate}`);
+    if (tokenEstimate > 2000) {
+      console.warn(`[Lore Router] WARNUNG: worldContext ist sehr groß (${tokenEstimate} Tokens)! Möglicherweise Halluzinationen.`);
     }
   }
+
+  const systemDirectivesBlock = worldInfo?.systemInstruction
+    ? `SYSTEM DIRECTIVES (Must Follow):\n${worldInfo.systemInstruction}\n\n`
+    : '';
 
   const chapterContext = chapter 
     ? `CURRENT CHAPTER: ${chapter.name}
@@ -1079,12 +1055,77 @@ export const generateGameTurn = async (
   // --- STORY HISTORY CONTEXT ---
   let historyContext = '';
   if (storyLog && storyLog.length > 0) {
-      historyContext = `
-      PREVIOUS STORY EVENTS (Chronological Order):
-      ${storyLog.map(entry => `[Scene: ${entry.sceneName} @ ${entry.locationName}] ${entry.summary}`).join('\n')}
+      const recentLog = storyLog.slice(-3);
+      const remainingLog = storyLog.slice(0, -3);
+
+      const activeCharacterIds = scene.characters.map(c => c.characterId);
+      const sceneLocationLower = (scene.locationName || '').toLowerCase();
       
-      INSTRUCTION: Use this history to maintain consistency. Refer to past events if relevant.
-      `;
+      const sceneTextMatch = `${scene.goal || ''} ${scene.description || ''}`.toLowerCase();
+      const tagMapping: Record<string, string[]> = {
+        'conflict': ['conflict', 'konflikt', 'streit', 'kampf'],
+        'romance': ['romance', 'romantik', 'liebe', 'flirt'],
+        'discovery': ['discovery', 'entdeckung', 'geheimnis', 'fund'],
+        'danger': ['danger', 'gefahr', 'bedrohung', 'falle'],
+        'important': ['important', 'wichtig', 'entscheidend'],
+        'choice': ['choice', 'entscheidung', 'wahl']
+      };
+
+      const isTagMatch = (tags: string[]) => {
+        if (!tags) return false;
+        for (const tag of tags) {
+           const t = tag.toLowerCase();
+           const synonyms = tagMapping[t] || [t];
+           for (const syn of synonyms) {
+               if (sceneTextMatch.includes(syn)) return true;
+           }
+        }
+        return false;
+      };
+
+      let relevantOlderLogs = remainingLog.filter(entry => {
+         const imp = entry.importance || 'major';
+         if (imp === 'critical') return true;
+         if (imp === 'minor') return false;
+         
+         if (entry.referencedCharacterIds?.some(id => activeCharacterIds.includes(id))) return true;
+         const entryLoc = (entry.locationName || '').toLowerCase();
+         if (entryLoc && sceneLocationLower && (entryLoc.includes(sceneLocationLower) || sceneLocationLower.includes(entryLoc))) return true;
+         if (isTagMatch(entry.tags || [])) return true;
+
+         return false;
+      });
+
+      if (relevantOlderLogs.length < 2 && storyLog.length > 5) {
+          const needed = 2 - relevantOlderLogs.length;
+          const fallbackCandidates = remainingLog
+              .filter(entry => !relevantOlderLogs.includes(entry) && (entry.importance === 'critical' || entry.importance === 'major' || !entry.importance))
+              .reverse();
+          
+          const fallbacks = fallbackCandidates.slice(0, needed);
+          relevantOlderLogs.push(...fallbacks);
+      }
+
+      if (relevantOlderLogs.length > 8) {
+          const criticals = relevantOlderLogs.filter(e => e.importance === 'critical').reverse();
+          const majors = relevantOlderLogs.filter(e => e.importance !== 'critical').reverse();
+          relevantOlderLogs = [...criticals, ...majors].slice(0, 8);
+      }
+
+      relevantOlderLogs.sort((a, b) => storyLog.indexOf(a) - storyLog.indexOf(b));
+
+      console.log(`[Story Budget] Log Count: ${storyLog.length} -> Sent: Recent(${recentLog.length}) + Relevant(${relevantOlderLogs.length}) | Fallback used: ${relevantOlderLogs.length < 2 && storyLog.length > 5 ? 'Yes' : 'No'}`);
+
+      historyContext = `PREVIOUS STORY EVENTS:\n\n`;
+      if (relevantOlderLogs.length > 0) {
+        historyContext += `RELEVANT PAST EVENTS (filtered for this scene):\n`;
+        historyContext += relevantOlderLogs.map(entry => `- [${entry.sceneName} @ ${entry.locationName}] ${entry.summary}`).join('\n') + `\n\n`;
+      }
+      
+      historyContext += `RECENT EVENTS (always included):\n`;
+      historyContext += recentLog.map(entry => `- [${entry.sceneName} @ ${entry.locationName}] ${entry.summary}`).join('\n') + `\n\n`;
+
+      historyContext += `INSTRUCTION: Use this history to maintain consistency. Refer to past events if relevant.\n\n`;
   }
 
   const aiHiddenInstructions = scene.aiInstructions 
@@ -1105,6 +1146,7 @@ export const generateGameTurn = async (
   const systemPrompt = `
     You are the Game Master and Engine for a Visual Novel.
     
+    ${systemDirectivesBlock}
     ${worldContext}
     ${chapterContext}
     ${historyContext}
@@ -1134,7 +1176,9 @@ export const generateGameTurn = async (
     3. Use the internal environment and sensory details to respond more accurately.
     4. CHECK RELATIONSHIP TRIGGERS: If the relationship system is active for a character, check if the user's input triggers a value change.
     5. EVALUATE SCENE GOAL / WIN CONDITION: Check if the Scene Goal ("${scene.goal || 'None'}") has been accomplished or satisfied by the player. If accomplished, YOU MUST SET "sceneGoalReached": true and explain in "sceneTransitionReason".
-    6. Respond strictly in JSON.
+    6. The CURRENT SITUATION block at the end of this prompt is the ground truth. If any information conflicts, the CURRENT SITUATION block wins.
+    7. Every character listed under 'Characters present' should get a turn to speak or react when appropriate. Do not silently ignore present characters for multiple turns.
+    8. Respond strictly in JSON.
   `;
 
   // 2. Format History for Gemini
@@ -1142,15 +1186,30 @@ export const generateGameTurn = async (
     `${msg.sender === 'user' ? 'Player' : (allCharacters.find(c => c.id === msg.characterId)?.name || 'Narrator')}: ${msg.text}`
   ).join('\n');
 
+  const locationSummary = scene.description 
+    ? (scene.description.length > 300 ? scene.description.substring(0, 300) + '...' : scene.description)
+    : 'No description provided';
+  const charactersPresentText = activeChars.map(c => `${c?.name} (${c?.sceneRole || 'Participant'})`).join(', ');
+  const sceneGoalText = (scene.goal && scene.goal.trim().length > 0) ? scene.goal : 'Open roleplay, no fixed goal';
+
+  const currentSituationBlock = `CURRENT SITUATION (most important – always respect this):
+    - Location: ${scene.locationName || 'Unknown Location'} – ${locationSummary}
+    - Characters present: ${charactersPresentText || 'None'}
+    - Scene goal: ${sceneGoalText}`;
+
   const fullPrompt = `
     ${systemPrompt}
 
     RECENT CHAT HISTORY:
     ${recentHistory}
 
+    ${currentSituationBlock}
+
     CURRENT PLAYER INPUT:
     "${currentInput}"
   `;
+
+  console.log("[generateGameTurn] Prompt:", fullPrompt);
 
   try {
     const activeCharacterIds = activeChars.map(c => c!.id);

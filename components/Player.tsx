@@ -41,7 +41,7 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
   
   // AI Lore Router State
   const [prefetchedLoreIds, setPrefetchedLoreIds] = useState<string[]>([]);
-  const [isRoutingLore, setIsRoutingLore] = useState(false);
+  const [isLoreLoading, setIsLoreLoading] = useState(false);
 
   // Notifications for Relationship Updates
   const [notifications, setNotifications] = useState<{ id: string, text: string, type: 'good' | 'bad' }[]>([]);
@@ -151,7 +151,7 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
     const allLocations = worldInfo?.loreLocations || [];
 
     if (allFactions.length > 0 || allLocations.length > 0) {
-      setIsRoutingLore(true);
+      setIsLoreLoading(true);
       const activeChars = currentScene.characters.map(sc => {
         const baseChar = characters.find(c => c.id === sc.characterId);
         return {
@@ -173,16 +173,17 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
         .then(selectedIds => {
           console.log("[Lore Router] Scoped Lore IDs for scene:", selectedIds);
           setPrefetchedLoreIds(selectedIds);
-          setIsRoutingLore(false);
         })
         .catch(err => {
           console.warn("[Lore Router] Prefetch failed, fallback to keyword scoring:", err);
           setPrefetchedLoreIds([]);
-          setIsRoutingLore(false);
+        })
+        .finally(() => {
+          setIsLoreLoading(false);
         });
     } else {
       setPrefetchedLoreIds([]);
-      setIsRoutingLore(false);
+      setIsLoreLoading(false);
     }
   }, [state.currentSceneIndex, currentScene]); // Trigger when index changes
 
@@ -195,7 +196,7 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
   };
 
   const handleSendMessage = async () => {
-    if (!userInput.trim() || state.isProcessing || !currentScene || playingVideo) return;
+    if (!userInput.trim() || state.isProcessing || isLoreLoading || !currentScene || playingVideo) return;
 
     const newMessage: ChatMessage = {
       sender: 'user',
@@ -448,7 +449,7 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
                 <div>
                    <div className="font-bold text-emerald-400 mb-1.5 border-b border-emerald-500/30 pb-1 flex justify-between items-center">
                       <span>Lore Sources</span>
-                      {isRoutingLore && <span className="text-[10px] text-yellow-400 animate-pulse">Routing...</span>}
+                      {isLoreLoading && <span className="text-[10px] text-yellow-400 animate-pulse">Routing...</span>}
                    </div>
                    
                    {/* Manual & AI Scoped Lore */}
@@ -461,7 +462,7 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
                       const hasManual = manualFactions.length > 0 || manualLocations.length > 0;
                       const hasAI = aiFactions.length > 0 || aiLocations.length > 0;
 
-                      if (!hasManual && !hasAI && !isRoutingLore) {
+                      if (!hasManual && !hasAI && !isLoreLoading) {
                          return <div className="text-gray-500 italic text-[11px]">Fallback: Dynamisches Keyword-Scoring aktiv</div>;
                       }
 
@@ -727,34 +728,42 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
           </div>
 
           {/* Input Area */}
-          <div className="p-2 md:p-4 border-t border-gray-700 bg-gray-900/50 flex gap-2">
-             <button 
-               id="save-btn"
-               onClick={handleSaveGame} 
-               disabled={isSaving}
-               className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-300 p-2 md:p-3 rounded-lg transition-colors flex items-center justify-center min-w-[40px] md:min-w-[50px]"
-               title="Save Current Progress"
-             >
-               {!isSaving && <Save size={16} />}
-             </button>
-             
-             <input
-               type="text"
-               className="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 md:px-4 md:py-3 text-xs md:text-sm text-white focus:border-emerald-500 outline-none transition-colors"
-               placeholder={goalReached ? "Keep chatting or leave..." : "What do you say/do?"}
-               value={userInput}
-               onChange={(e) => setUserInput(e.target.value)}
-               onKeyDown={handleKeyDown}
-               autoFocus
-               disabled={state.isProcessing}
-             />
-             <button 
-                onClick={handleSendMessage}
-                disabled={!userInput.trim() || state.isProcessing}
-                className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-700 disabled:cursor-not-allowed text-white p-2 md:p-3 rounded-lg transition-colors"
-             >
-               <Send size={16} />
-             </button>
+          <div className="p-2 md:p-4 border-t border-gray-700 bg-gray-900/50 flex flex-col gap-1.5">
+             {isLoreLoading && (
+                <div className="flex items-center gap-1.5 text-yellow-400 text-[11px] px-1 animate-pulse">
+                   <Loader2 size={12} className="animate-spin" /> Lore wird geladen...
+                </div>
+             )}
+             <div className="flex gap-2">
+                <button 
+                  id="save-btn"
+                  onClick={handleSaveGame} 
+                  disabled={isSaving}
+                  className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-300 p-2 md:p-3 rounded-lg transition-colors flex items-center justify-center min-w-[40px] md:min-w-[50px]"
+                  title="Save Current Progress"
+                >
+                  {!isSaving && <Save size={16} />}
+                </button>
+                
+                <input
+                  type="text"
+                  className="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 md:px-4 md:py-3 text-xs md:text-sm text-white focus:border-emerald-500 outline-none transition-colors"
+                  placeholder={goalReached ? "Keep chatting or leave..." : isLoreLoading ? "Lore wird geladen..." : "What do you say/do?"}
+                  value={userInput}
+                  onChange={(e) => setUserInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  autoFocus
+                  disabled={state.isProcessing || isLoreLoading}
+                />
+                <button 
+                   onClick={handleSendMessage}
+                   disabled={!userInput.trim() || state.isProcessing || isLoreLoading}
+                   className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-700 disabled:cursor-not-allowed text-white p-2 md:p-3 rounded-lg transition-colors flex items-center justify-center min-w-[40px] md:min-w-[44px]"
+                   title={isLoreLoading ? "Lore wird geladen..." : "Senden"}
+                >
+                   {isLoreLoading ? <Loader2 size={16} className="animate-spin text-gray-400" /> : <Send size={16} />}
+                </button>
+             </div>
           </div>
 
         </div>
