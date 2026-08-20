@@ -90,7 +90,7 @@ async function startServer() {
   const PORT = 3000;
 
   // Middleware for body parsing
-  app.use(express.json({ limit: "15mb" }));
+  app.use(express.json({ limit: "15mb" }) as any);
 
   // API endpoint for Gemini content generation
   app.post("/api/gemini/generate", async (req, res) => {
@@ -193,11 +193,11 @@ async function startServer() {
       server: { middlewareMode: true },
       appType: "spa",
     });
-    app.use(vite.middlewares);
+    app.use(vite.middlewares as any);
   } else {
     console.log("Serving static production assets from dist/ directory...");
     const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
+    app.use(express.static(distPath) as any);
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });

@@ -175,3 +175,5 @@ export const TagSelector: React.FC<TagSelectorProps> = ({
     </div>
   );
 };
+
+export default TagSelector;

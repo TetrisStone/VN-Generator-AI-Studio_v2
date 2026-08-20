@@ -320,7 +320,7 @@ export interface AssetItem {
   characterMeta?: CharacterAssetMeta;
   locationMeta?: LocationAssetMeta;
   assignedTo?: {
-    type: 'character_idle' | 'character_emotion' | 'character_sprite' | 'scene_bg' | 'map_bg';
+    type: 'character_idle' | 'character_emotion' | 'character_sprite' | 'character_map' | 'scene_bg' | 'map_bg' | 'battle_bg';
     targetId: string;
     targetName?: string;
     emotionName?: string;
