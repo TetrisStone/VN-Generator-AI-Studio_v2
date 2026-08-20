@@ -1,6 +1,6 @@
 
 import { Type, Schema } from "@google/genai";
-import { Scene, Character, ChatMessage, AIResponse, WorldInfo, Chapter, StoryLogEntry, SceneCharacterConfig, Faction, WorldLocation } from "../types";
+import { Scene, Character, ChatMessage, AIResponse, WorldInfo, Chapter, StoryLogEntry, SceneCharacterConfig, Faction, WorldLocation, AssetItem } from "../types";
 
 export const EMOTION_ENUM = ['idle', 'happy', 'angry', 'thoughtful', 'shy', 'sad', 'shocked', 'worried', 'lustful'] as const;
 
@@ -335,42 +335,69 @@ async function callLLM(
         } else if (isOllama) {
             const url = (worldInfo?.ollamaUrl || 'http://localhost:11434').replace(/\/$/, '');
             const model = worldInfo?.llmModel || 'llama3';
-            
-            const promptNotice = useStrictFormat
-                ? `\n\nCRITICAL: You must output strictly valid JSON matching this schema:\n${JSON.stringify(schema, null, 2)}`
-                : `\n\nCRITICAL: You must output strictly valid JSON matching this schema. Respond ONLY with the JSON object, without explanations, without markdown codeblocks:\n${JSON.stringify(schema, null, 2)}`;
+
+            const promptNotice = `\n\nCRITICAL: You must output strictly valid JSON matching this schema.\nRespond ONLY with the JSON object, without explanations and without markdown codeblocks:\n\n${JSON.stringify(schema, null, 2)}`;
 
             const ollamaPrompt = currentPrompt + promptNotice;
-            const ollamaFormat = useStrictFormat ? toOllamaJsonSchema(schema) : 'json';
+
+            // Bei Ollama immer das konkrete JSON-Schema verwenden (Structured Outputs).
+            const ollamaFormat = toOllamaJsonSchema(schema);
+
+            const options: Record<string, unknown> = {
+                temperature: worldInfo?.ollamaTemperature ?? 0.7,
+                repeat_penalty: worldInfo?.ollamaRepeatPenalty ?? 1.1,
+                num_predict: 2048
+            };
+
+            // num_ctx nur mitsenden, wenn in der App explizit gesetzt.
+            // Andernfalls gilt die Einstellung der Ollama-App.
+            if (worldInfo?.ollamaNumCtx) {
+                options.num_ctx = worldInfo.ollamaNumCtx;
+            }
 
             const res = await fetch(`${url}/api/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    model: model,
+                    model,
                     prompt: ollamaPrompt,
                     stream: false,
+                    think: false, // WICHTIG: Top-Level, nicht in options!
                     format: ollamaFormat,
-                    options: {
-                        num_ctx: worldInfo?.ollamaNumCtx || 8192,
-                        temperature: worldInfo?.ollamaTemperature ?? 0.8,
-                        repeat_penalty: worldInfo?.ollamaRepeatPenalty ?? 1.1
-                    }
+                    options
                 })
             });
-            
+
             if (!res.ok) {
-                throw new Error(`Ollama Error: ${res.statusText}`);
+                const errorText = await res.text().catch(() => '');
+                throw new Error(`Ollama Error ${res.status}: ${errorText || res.statusText}`);
             }
-            
+
             const data = await res.json();
+
+            const rawText = typeof data.response === 'string' ? data.response.trim() : '';
+
+            if (!data.done) {
+                console.warn("[Ollama] Unfinished response:", {
+                    done_reason: data.done_reason,
+                    responseLength: rawText.length
+                });
+            }
+
+            if (!rawText) {
+                console.error("[Ollama] Empty response. Thinking-Feld-Länge:",
+                    typeof data.thinking === 'string' ? data.thinking.length : 0,
+                    "done_reason:", data.done_reason);
+                throw new Error("Ollama returned an empty response (output may have gone to the thinking field).");
+            }
+
             const tokenStats = {
                 promptTokens: data.prompt_eval_count || 0,
                 completionTokens: data.eval_count || 0,
                 totalTokens: (data.prompt_eval_count || 0) + (data.eval_count || 0)
             };
-            
-            return { rawText: data.response || "", tokenStats };
+
+            return { rawText, tokenStats };
         } else {
             const response = await fetch("/api/gemini/generate", {
                 method: "POST",
@@ -851,6 +878,7 @@ Antworte AUSSCHLIESSLICH mit den kommagetrennten Tags, ohne Erklärungen, ohne A
                 model: model,
                 prompt: prompt,
                 stream: false,
+                think: false,
                 options: {
                     num_ctx: worldInfo?.ollamaNumCtx || 8192,
                     temperature: worldInfo?.ollamaTemperature ?? 0.8,

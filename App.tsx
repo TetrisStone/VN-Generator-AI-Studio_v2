@@ -132,9 +132,16 @@ const DEFAULT_WORLD: WorldInfo = {
         { id: 'l1', name: 'Sector 7', description: 'The industrial district where the poor live.' }
     ],
     diceConfig: { skins: {} },
+    systemInstruction: '',
     llmProvider: 'gemini',
     llmModel: 'gemini-3.5-flash',
     ollamaUrl: 'http://localhost:11434',
+    ollamaNumCtx: 8192,
+    ollamaTemperature: 0.8,
+    ollamaRepeatPenalty: 1.1,
+    openaiApiKey: '',
+    openaiBaseUrl: 'https://openrouter.ai/api/v1',
+    openaiModel: 'nous-hermes/llama-3.1-70b',
     comfyUrl: 'http://127.0.0.1:8188',
     comfyEnabled: false,
     comfyWorkflow: ''
@@ -305,8 +312,10 @@ const App: React.FC = () => {
             }
 
             if (data.worldInfo) {
-                // Migration: Ensure factions and loreLocations exist
+                // Migration & Loading: Ensure all model settings and lore fields exist
                 setWorldInfo({
+                    ...DEFAULT_WORLD,
+                    ...data.worldInfo,
                     description: data.worldInfo.description || '',
                     factions: data.worldInfo.factions || [],
                     loreLocations: data.worldInfo.loreLocations || [],
@@ -315,6 +324,12 @@ const App: React.FC = () => {
                     llmProvider: data.worldInfo.llmProvider || 'gemini',
                     llmModel: data.worldInfo.llmModel || 'gemini-3.5-flash',
                     ollamaUrl: data.worldInfo.ollamaUrl || 'http://localhost:11434',
+                    ollamaNumCtx: data.worldInfo.ollamaNumCtx ?? 8192,
+                    ollamaTemperature: data.worldInfo.ollamaTemperature ?? 0.8,
+                    ollamaRepeatPenalty: data.worldInfo.ollamaRepeatPenalty ?? 1.1,
+                    openaiApiKey: data.worldInfo.openaiApiKey ?? '',
+                    openaiBaseUrl: data.worldInfo.openaiBaseUrl ?? 'https://openrouter.ai/api/v1',
+                    openaiModel: data.worldInfo.openaiModel ?? '',
                     comfyUrl: data.worldInfo.comfyUrl || 'http://127.0.0.1:8188',
                     comfyEnabled: !!data.worldInfo.comfyEnabled,
                     comfyWorkflow: data.worldInfo.comfyWorkflow || ''
@@ -596,6 +611,8 @@ const App: React.FC = () => {
       
       if (data.worldInfo) {
            setWorldInfo({
+              ...DEFAULT_WORLD,
+              ...data.worldInfo,
               description: data.worldInfo.description || '',
               factions: data.worldInfo.factions || [],
               loreLocations: data.worldInfo.loreLocations || [],
@@ -604,6 +621,12 @@ const App: React.FC = () => {
               llmProvider: data.worldInfo.llmProvider || 'gemini',
               llmModel: data.worldInfo.llmModel || 'gemini-3.5-flash',
               ollamaUrl: data.worldInfo.ollamaUrl || 'http://localhost:11434',
+              ollamaNumCtx: data.worldInfo.ollamaNumCtx ?? 8192,
+              ollamaTemperature: data.worldInfo.ollamaTemperature ?? 0.8,
+              ollamaRepeatPenalty: data.worldInfo.ollamaRepeatPenalty ?? 1.1,
+              openaiApiKey: data.worldInfo.openaiApiKey ?? '',
+              openaiBaseUrl: data.worldInfo.openaiBaseUrl ?? 'https://openrouter.ai/api/v1',
+              openaiModel: data.worldInfo.openaiModel ?? '',
               comfyUrl: data.worldInfo.comfyUrl || 'http://127.0.0.1:8188',
               comfyEnabled: !!data.worldInfo.comfyEnabled,
               comfyWorkflow: data.worldInfo.comfyWorkflow || ''
@@ -1063,7 +1086,10 @@ const App: React.FC = () => {
               battles={battles}
               assets={assets}
               storyLog={rpgState.storyLog} // PASS STORY LOG TO EDITOR
-              onUpdateWorldInfo={setWorldInfo}
+              onUpdateWorldInfo={(updatedWorld) => {
+                setWorldInfo(updatedWorld);
+                setProjectItem('worldInfo', updatedWorld).catch(console.error);
+              }}
               onUpdateChapters={setChapters}
               onUpdateCharacters={setCharacters}
               onUpdateScenes={setScenes}
