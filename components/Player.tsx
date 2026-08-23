@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Scene, Character, ChatMessage, GameState, GameSaveData, Chapter, WorldInfo, CharacterEmotion } from '../types';
+import { Scene, Character, ChatMessage, GameState, GameSaveData, Chapter, WorldInfo, CharacterEmotion, RelationshipKeyMoment } from '../types';
 import { generateGameTurn, generateImagePromptContext, selectRelevantLore } from '../services/geminiService';
 import { Button } from './ui/Button';
 import { ArrowLeft, RefreshCw, Send, Save, Map, CheckCircle, Play, MapPin, Heart, SkipForward, Target, Cpu, Sparkles, XCircle, Loader2, User, Image as ImageIcon } from 'lucide-react';
@@ -8,6 +8,8 @@ import { AsyncImage } from './ui/AsyncImage';
 import { AsyncVideo } from './ui/AsyncVideo';
 import { generateComfyImage, prepareComfyWorkflow } from '../services/comfyService';
 import { saveImage } from '../utils/imageStorage';
+
+const KEY_MOMENT_THRESHOLD = 5;
 
 interface PlayerProps {
   scenes: Scene[];
@@ -250,10 +252,32 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
               if (char && char.relationship) {
                   // Calculate new value
                   const newVal = (char.relationship.currentValue || 0) + update.change;
+                  
+                  let newKeyMoments = char.relationship.keyMoments ? [...char.relationship.keyMoments] : [];
+                  if (Math.abs(update.change) >= KEY_MOMENT_THRESHOLD) {
+                      const emotionalTone: 'positive' | 'negative' | 'neutral' = 
+                          update.change > 0 ? 'positive' : update.change < 0 ? 'negative' : 'neutral';
+                      
+                      const newMoment: RelationshipKeyMoment = {
+                          id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'km_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+                          timestamp: Date.now(),
+                          description: update.reason || '',
+                          impact: update.change,
+                          emotionalTone,
+                          sceneName: currentScene.name
+                      };
+                      
+                      newKeyMoments = [...newKeyMoments, newMoment].slice(-10);
+                  }
+
                   // Persist change
                   onCharacterUpdate({
                       ...char,
-                      relationship: { ...char.relationship, currentValue: newVal }
+                      relationship: { 
+                          ...char.relationship, 
+                          currentValue: newVal,
+                          keyMoments: newKeyMoments
+                      }
                   });
                   // Show Notification
                   const sign = update.change > 0 ? '+' : '';

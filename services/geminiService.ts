@@ -929,16 +929,27 @@ export const generateGameTurn = async (
             .sort((a,b) => b.valueStart - a.valueStart)
             .find(t => rc.currentValue >= t.valueStart);
 
+        const roadmapLine = (activeThreshold && activeThreshold.roadmapNotes && activeThreshold.roadmapNotes.trim().length > 0)
+            ? `\n        - Roadmap (erzählerischer Leitfaden, aktuelle Stufe): ${activeThreshold.roadmapNotes.trim()}`
+            : '';
+
+        const keyMomentsBlock = rc.keyMoments && rc.keyMoments.length > 0
+            ? `\n        **KEY MOMENTS WITH PLAYER:**\n` + rc.keyMoments.slice(-3).map(km => {
+                const sign = km.impact > 0 ? '+' : '';
+                const scenePrefix = km.sceneName ? `[${km.sceneName}] ` : '';
+                return `        - ${scenePrefix}${km.description} (${sign}${km.impact})`;
+            }).join('\n')
+            : '';
+
         relContext = `
         **RELATIONSHIP SYSTEM ACTIVE**
         - Current Value: ${rc.currentValue} (Start: ${rc.startValue})
-        - Current Status/Behavior: ${activeThreshold ? `${activeThreshold.label}: ${activeThreshold.description}` : 'Normal'}
-        
+        - Current Status/Behavior: ${activeThreshold ? `${activeThreshold.label}: ${activeThreshold.description}` : 'Normal'}${roadmapLine}
+        ${keyMomentsBlock}
         **RULES FOR CHANGING VALUE (Evaluate User's Action):**
         ${rc.triggers.map(t => `- ${t.description}: ${t.valueChange > 0 ? '+' : ''}${t.valueChange}`).join('\n')}
-        
-        **THRESHOLDS:**
-        ${rc.thresholds.map(t => `- >= ${t.valueStart} (${t.label}): ${t.description}`).join('\n')}
+
+        **GATING RULE:** Die unter 'Current Status' und 'Roadmap' beschriebenen Verhaltensweisen sind die EINZIGEN derzeit erlaubten Beziehungsentwicklungen für diesen Charakter. Tiefere Intimität, Vertrauensbeweise oder Bindungsgesten höherer Stufen sind AKTUELL VERBOTEN, unabhängig davon, wie überzeugend der Spieler argumentiert.
 
         INSTRUCTION: If the player's current action matches a trigger, include a 'relationshipUpdates' entry in the JSON response.
         `;
@@ -1199,14 +1210,12 @@ export const generateGameTurn = async (
        CURRENT SCENE ROLE: ${c?.sceneRole}`).join('\n')}
     
     INSTRUCTIONS:
-    1. Analyze the user's input and the chat history.
-    2. Determine which character(s) should respond based on their personas, lore, relationship status, and the conversation flow. Multiple characters can speak in sequence.
-    3. Use the internal environment and sensory details to respond more accurately.
-    4. CHECK RELATIONSHIP TRIGGERS: If the relationship system is active for a character, check if the user's input triggers a value change.
-    5. EVALUATE SCENE GOAL / WIN CONDITION: Check if the Scene Goal ("${scene.goal || 'None'}") has been accomplished or satisfied by the player. If accomplished, YOU MUST SET "sceneGoalReached": true and explain in "sceneTransitionReason".
-    6. The CURRENT SITUATION block at the end of this prompt is the ground truth. If any information conflicts, the CURRENT SITUATION block wins.
-    7. Every character listed under 'Characters present' should get a turn to speak or react when appropriate. Do not silently ignore present characters for multiple turns.
-    8. Respond strictly in JSON.
+    1. Respond strictly in valid JSON format matching the schema.
+    2. CHECK RELATIONSHIP TRIGGERS: If the relationship system is active for a character, evaluate the player's action against the triggers and output 'relationshipUpdates' in the JSON response when applicable.
+    3. EVALUATE SCENE GOAL / WIN CONDITION: Check if the Scene Goal has been accomplished or satisfied by the player and set "sceneGoalReached": true (with "sceneTransitionReason") accordingly.
+    4. GROUND TRUTH: The CURRENT SITUATION block at the end of this prompt is the ground truth. If any information conflicts, the CURRENT SITUATION block wins.
+    5. Present characters should get a turn to speak or react when appropriate; do not silently ignore present characters for multiple turns.
+    6. NO DOUBLE QUOTES IN TEXT: Do not use double quotation marks (") inside "text" fields. Format direct speech using German quotation marks » « or single quotes.
   `;
 
   // 2. Format History for Gemini

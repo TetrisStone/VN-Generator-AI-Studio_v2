@@ -1007,9 +1007,77 @@ const CharacterEditor: React.FC<CharacterEditorProps> = ({ character, assets, on
                                                 updateRelationship({ thresholds: newThresholds });
                                             }}
                                         />
+                                        <div className="mt-2">
+                                            <label className="text-[10px] text-indigo-300/80 block mb-0.5 font-medium">
+                                                Roadmap-Notizen (erzählerischer Leitfaden für diese Stufe, optional)
+                                            </label>
+                                            <textarea 
+                                                className="w-full bg-gray-800/90 border border-indigo-900/40 focus:border-indigo-500 rounded p-2 text-xs text-gray-300 h-16"
+                                                placeholder="z.B. Nur vorsichtige Annäherung erlaubt, noch keine echten Liebesgeständnisse möglich..."
+                                                value={t.roadmapNotes || ''}
+                                                onChange={e => {
+                                                    const newThresholds = [...character.relationship!.thresholds];
+                                                    const idx = newThresholds.findIndex(x => x.id === t.id);
+                                                    newThresholds[idx] = { ...t, roadmapNotes: e.target.value };
+                                                    updateRelationship({ thresholds: newThresholds });
+                                                }}
+                                            />
+                                        </div>
                                     </div>
                                 ))}
                             </div>
+                        </div>
+
+                        {/* KEY MOMENTS (PERSISTENT MEMORY) */}
+                        <div>
+                            <div className="flex justify-between items-center mb-2">
+                                <label className="text-xs font-bold text-gray-500 uppercase">
+                                    Schlüsselmomente / Key Moments ({character.relationship.keyMoments?.length || 0}/10)
+                                </label>
+                            </div>
+                            {(!character.relationship.keyMoments || character.relationship.keyMoments.length === 0) ? (
+                                <div className="bg-gray-900/60 border border-dashed border-gray-700/60 rounded-lg p-3 text-center text-xs text-gray-500 italic">
+                                    Noch keine Schlüsselmomente aufgezeichnet. (Werden im Spiel automatisch bei Beziehungsänderungen &ge; &plusmn;5 festgehalten).
+                                </div>
+                            ) : (
+                                <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                                    {character.relationship.keyMoments.map((km) => {
+                                        const isPos = km.emotionalTone === 'positive' || km.impact > 0;
+                                        const isNeg = km.emotionalTone === 'negative' || km.impact < 0;
+                                        const containerStyle = isPos 
+                                            ? 'text-emerald-300 border-emerald-800/60 bg-emerald-950/30' 
+                                            : isNeg 
+                                                ? 'text-rose-300 border-rose-800/60 bg-rose-950/30' 
+                                                : 'text-gray-300 border-gray-700 bg-gray-900/40';
+                                        const badgeStyle = isPos 
+                                            ? 'bg-emerald-900/80 text-emerald-300 border-emerald-600/50' 
+                                            : isNeg 
+                                                ? 'bg-rose-900/80 text-rose-300 border-rose-600/50' 
+                                                : 'bg-gray-800 text-gray-400 border-gray-600';
+                                        
+                                        const formattedTime = km.timestamp ? new Date(km.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+
+                                        return (
+                                            <div key={km.id} className={`flex items-center justify-between p-2 rounded border text-xs ${containerStyle}`}>
+                                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border flex-shrink-0 ${badgeStyle}`}>
+                                                        {km.impact > 0 ? `+${km.impact}` : km.impact}
+                                                    </span>
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="truncate font-medium text-gray-200" title={km.description}>
+                                                            {km.description}
+                                                        </div>
+                                                        <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-0.5">
+                                                            {km.sceneName && <span>Szene: {km.sceneName}</span>}
+                                                            {formattedTime && <span>• {formattedTime}</span>}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
 
                     </div>

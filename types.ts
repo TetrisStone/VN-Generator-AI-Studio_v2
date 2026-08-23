@@ -21,6 +21,16 @@ export interface RelationshipThreshold {
     label: string;
     valueStart: number;
     description: string;
+    roadmapNotes?: string;  // NEU: erzählerischer Leitfaden NUR für diese Stufe
+}
+
+export interface RelationshipKeyMoment {
+    id: string;
+    timestamp: number;
+    description: string;   // reason aus relationshipUpdates
+    impact: number;        // der change-Wert
+    emotionalTone: 'positive' | 'negative' | 'neutral';
+    sceneName?: string;
 }
 
 export interface RelationshipConfig {
@@ -29,6 +39,7 @@ export interface RelationshipConfig {
     startValue: number;
     triggers: RelationshipTrigger[];
     thresholds: RelationshipThreshold[];
+    keyMoments?: RelationshipKeyMoment[];
 }
 
 export interface WeaponConfig {
