@@ -12,3 +12,5 @@ export const audioManager = {
         localStorage.setItem('sfxVolume', vol.toString());
     }
 };
+
+export default audioManager;

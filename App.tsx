@@ -695,10 +695,17 @@ const App: React.FC = () => {
   };
 
   const handleStartNewGame = () => {
-    // Reset Relationship Values to startValue for a new game
+    // Reset Relationship Values to startValue and reset keyMoments for a new game
     const resetChars = characters.map(c => {
         if (c.relationship) {
-            return { ...c, relationship: { ...c.relationship, currentValue: c.relationship.startValue } };
+            return { 
+                ...c, 
+                relationship: { 
+                    ...c.relationship, 
+                    currentValue: c.relationship.startValue,
+                    keyMoments: []  // NEU: Auch keyMoments zurücksetzen
+                } 
+            };
         }
         return c;
     });

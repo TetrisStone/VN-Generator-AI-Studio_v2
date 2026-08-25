@@ -44,6 +44,10 @@ interface FloatingText {
 }
 
 interface VisualRoll extends DetailedRoll {
+    roll: number;
+    total: number;
+    isSuccess?: boolean;
+    label?: string;
     skinSeed: number; // Used to pick skin deterministically
 }
 

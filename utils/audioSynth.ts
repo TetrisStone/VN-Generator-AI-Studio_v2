@@ -47,4 +47,6 @@ export const playSynthSfx = (type: 'miss' | 'hit' | 'crit' | 'death', volume: nu
     } catch (e) {
         console.error("Audio synth error", e);
     }
-}
+};
+
+export default playSynthSfx;
