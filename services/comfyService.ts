@@ -92,13 +92,37 @@ export function prepareComfyWorkflow(
   workflowStr: string,
   positivePrompt: string,
   width = 1024,
-  height = 576
+  height = 576,
+  loraTrigger?: string
 ): any {
   try {
     const workflow = JSON.parse(workflowStr || JSON.stringify(getDefaultWorkflow()));
     let foundPositive = false;
+    const trimmedTrigger = loraTrigger?.trim();
 
     for (const [nodeId, node] of Object.entries(workflow) as [string, any][]) {
+      // Dynamic LoRA Loader Handling
+      if (node.class_type === "LoraLoader" || node.class_type?.includes("LoraLoader")) {
+        node.inputs = node.inputs || {};
+        if (trimmedTrigger && trimmedTrigger.length > 0) {
+          const loraFilename = trimmedTrigger.endsWith('.safetensors') || trimmedTrigger.endsWith('.ckpt') || trimmedTrigger.endsWith('.pt')
+            ? trimmedTrigger
+            : `${trimmedTrigger}.safetensors`;
+          node.inputs.lora_name = loraFilename;
+          // Ensure strengths are enabled if set or 0
+          if (node.inputs.strength_model === undefined || node.inputs.strength_model === 0) {
+            node.inputs.strength_model = 1.0;
+          }
+          if (node.inputs.strength_clip === undefined || node.inputs.strength_clip === 0) {
+            node.inputs.strength_clip = 1.0;
+          }
+        } else {
+          // No trigger provided: disable LoRA effect
+          node.inputs.strength_model = 0;
+          node.inputs.strength_clip = 0;
+        }
+      }
+
       // Find CLIPTextEncode nodes
       if (node.class_type === "CLIPTextEncode") {
         const currentText = node.inputs?.text || "";

@@ -63,6 +63,14 @@ export interface CombatStats {
     weapon: WeaponConfig;
 }
 
+export interface CharacterImagePrompts {
+    trigger?: string;      // z.B. "lstsprk_elr_bs" (LoRA-Triggerwort)
+    face?: string;         // z.B. "red_hair, long_hair, blue_eyes"
+    hair?: string;         // z.B. "hair_down" oder "ponytail"
+    clothes?: string;      // z.B. "silver_blue_armor, gauntlets"
+    bodyType?: string;     // z.B. "athletic, tall" (optional)
+}
+
 export type CharacterImportance = 'main' | 'side';
 export type CharacterAlignment = 'gut' | 'boese' | 'neutral';
 
@@ -71,7 +79,8 @@ export interface Character {
   name: string;
   defaultDescription: string;
   lore?: string;
-  aiImagePrompt?: string; // New field for ComfyUI generation
+  aiImagePrompt?: string; // Fallback field for ComfyUI generation
+  imagePrompts?: CharacterImagePrompts; // Structured prompt parts
   
   // Categorization & Structure
   importance?: CharacterImportance;

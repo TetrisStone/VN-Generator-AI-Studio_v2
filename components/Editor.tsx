@@ -795,14 +795,101 @@ const CharacterEditor: React.FC<CharacterEditorProps> = ({ character, assets, on
                 <textarea className="w-full bg-gray-800 border border-gray-700 rounded p-2 h-24 text-white" value={character.defaultDescription} onChange={e => onChange({ defaultDescription: e.target.value })} />
             </div>
 
-            <div>
-                <label className="text-xs font-bold text-gray-500 uppercase">KI-Bild-Prompt (ComfyUI / Lora)</label>
-                <textarea 
-                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 h-16 text-sm text-gray-300" 
-                    placeholder="Trigger words oder visuelle Eigenschaften (z.B. 1girl, elara_lora, red hair, fantasy dress...)"
-                    value={character.aiImagePrompt || ''} 
-                    onChange={e => onChange({ aiImagePrompt: e.target.value })} 
-                />
+            {/* STRUCTURED IMAGE PROMPTS (COMFYUI / LORA) */}
+            <div className="bg-gray-800/90 p-4 rounded-lg border border-purple-900/40 space-y-3 shadow-inner">
+                <div className="flex justify-between items-center">
+                    <label className="text-xs font-bold text-purple-400 uppercase flex items-center gap-1.5">
+                        <Sparkles size={14} className="text-purple-400" /> KI-Bild-Prompt &amp; LoRA-Konfiguration (ComfyUI)
+                    </label>
+                </div>
+                <p className="text-[11px] text-gray-400 leading-relaxed">
+                    Diese Felder werden bei der Bildgenerierung mit dem Standard-Prompt kombiniert. Leer lassen = Feld wird nicht verwendet.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                        <label className="text-[11px] font-semibold text-gray-300 block mb-1">
+                            1. Triggerword (LoRA-Trigger)
+                        </label>
+                        <input 
+                            type="text" 
+                            className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-xs text-white placeholder-gray-500 focus:border-purple-500 outline-none"
+                            placeholder="z.B. lstsprk_elr_bs"
+                            value={character.imagePrompts?.trigger || ''}
+                            onChange={e => onChange({
+                                imagePrompts: { ...character.imagePrompts, trigger: e.target.value }
+                            })}
+                        />
+                    </div>
+                    <div>
+                        <label className="text-[11px] font-semibold text-gray-300 block mb-1">
+                            2. Face (Gesichtsmerkmale)
+                        </label>
+                        <input 
+                            type="text" 
+                            className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-xs text-white placeholder-gray-500 focus:border-purple-500 outline-none"
+                            placeholder="z.B. red_hair, long_hair, blue_eyes"
+                            value={character.imagePrompts?.face || ''}
+                            onChange={e => onChange({
+                                imagePrompts: { ...character.imagePrompts, face: e.target.value }
+                            })}
+                        />
+                    </div>
+                    <div>
+                        <label className="text-[11px] font-semibold text-gray-300 block mb-1">
+                            3. Hair (Frisur / Styling)
+                        </label>
+                        <input 
+                            type="text" 
+                            className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-xs text-white placeholder-gray-500 focus:border-purple-500 outline-none"
+                            placeholder="z.B. hair_down oder ponytail"
+                            value={character.imagePrompts?.hair || ''}
+                            onChange={e => onChange({
+                                imagePrompts: { ...character.imagePrompts, hair: e.target.value }
+                            })}
+                        />
+                    </div>
+                    <div>
+                        <label className="text-[11px] font-semibold text-gray-300 block mb-1">
+                            4. Clothes (Kleidung / Rüstung)
+                        </label>
+                        <input 
+                            type="text" 
+                            className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-xs text-white placeholder-gray-500 focus:border-purple-500 outline-none"
+                            placeholder="z.B. silver_blue_armor, gauntlets"
+                            value={character.imagePrompts?.clothes || ''}
+                            onChange={e => onChange({
+                                imagePrompts: { ...character.imagePrompts, clothes: e.target.value }
+                            })}
+                        />
+                    </div>
+                    <div className="md:col-span-2">
+                        <label className="text-[11px] font-semibold text-gray-300 block mb-1">
+                            5. Body Type (Körperbau, optional)
+                        </label>
+                        <input 
+                            type="text" 
+                            className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-xs text-white placeholder-gray-500 focus:border-purple-500 outline-none"
+                            placeholder="z.B. athletic, tall"
+                            value={character.imagePrompts?.bodyType || ''}
+                            onChange={e => onChange({
+                                imagePrompts: { ...character.imagePrompts, bodyType: e.target.value }
+                            })}
+                        />
+                    </div>
+                </div>
+
+                <div className="pt-2 border-t border-gray-700/60">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">
+                        Legacy KI-Bild-Prompt (Freitext Fallback)
+                    </label>
+                    <input 
+                        type="text" 
+                        className="w-full bg-gray-900/60 border border-gray-700/60 rounded p-2 text-xs text-gray-400 focus:border-purple-500 outline-none" 
+                        placeholder="Freitext-Prompt für Abwärtskompatibilität (z.B. 1girl, elara_lora, red hair...)"
+                        value={character.aiImagePrompt || ''} 
+                        onChange={e => onChange({ aiImagePrompt: e.target.value })} 
+                    />
+                </div>
             </div>
 
             <div>

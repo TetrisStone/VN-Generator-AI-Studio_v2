@@ -10,6 +10,7 @@ import { generateComfyImage, prepareComfyWorkflow } from '../services/comfyServi
 import { saveImage } from '../utils/imageStorage';
 
 const KEY_MOMENT_THRESHOLD = 5;
+const COMFY_STANDARD_PROMPT = "masterpiece, best quality, score_9, anime, simple_background";
 
 interface PlayerProps {
   scenes: Scene[];
@@ -59,11 +60,18 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
   // ComfyUI States
   const [showComfyModal, setShowComfyModal] = useState(false);
   const [activeEventCG, setActiveEventCG] = useState<string | null>(null);
-  const [comfyPrompt, setComfyPrompt] = useState('');
   const [comfyStatus, setComfyStatus] = useState('');
   const [isComfyGenerating, setIsComfyGenerating] = useState(false);
-  const [isComfyContextLoading, setIsComfyContextLoading] = useState(false);
   const [comfyError, setComfyError] = useState<string | null>(null);
+
+  // ComfyUI Structured Prompt Building Blocks
+  const [comfySelectedCharId, setComfySelectedCharId] = useState<string>('');
+  const [comfyTrigger, setComfyTrigger] = useState<string>('');
+  const [comfyHead, setComfyHead] = useState<string>('');
+  const [comfyBody, setComfyBody] = useState<string>('');
+  const [comfyModifiers, setComfyModifiers] = useState<string>('');
+  const [comfyAction, setComfyAction] = useState<string>('');
+  const [comfyParticipants, setComfyParticipants] = useState<string>('');
 
   // Find current chapter
   const currentChapter = currentScene?.chapterId ? chapters.find(c => c.id === currentScene.chapterId) : undefined;
@@ -73,32 +81,60 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
     .map(sc => characters.find(c => c.id === sc.characterId))
     .filter((c): c is Character => !!c) || [];
 
-  const handleOpenComfyModal = async () => {
+  const populateComfyFieldsForCharacter = (char: Character | undefined) => {
+    if (!char) {
+      setComfySelectedCharId('');
+      setComfyTrigger('');
+      setComfyHead('');
+      setComfyBody('');
+      return;
+    }
+    setComfySelectedCharId(char.id);
+    setComfyTrigger(char.imagePrompts?.trigger?.trim() || char.aiImagePrompt?.trim() || '');
+
+    const headParts = [char.imagePrompts?.face, char.imagePrompts?.hair]
+      .filter(Boolean)
+      .map(s => s!.trim())
+      .filter(s => s.length > 0);
+    setComfyHead(headParts.join(', '));
+
+    const bodyParts = [char.imagePrompts?.clothes, char.imagePrompts?.bodyType]
+      .filter(Boolean)
+      .map(s => s!.trim())
+      .filter(s => s.length > 0);
+    setComfyBody(bodyParts.join(', '));
+  };
+
+  const finalComfyPrompt = React.useMemo(() => {
+    const parts = [
+      COMFY_STANDARD_PROMPT,
+      comfyTrigger,
+      comfyHead,
+      comfyBody,
+      comfyModifiers,
+      comfyAction,
+      comfyParticipants
+    ];
+    return parts
+      .map(p => (p || '').trim())
+      .filter(p => p.length > 0)
+      .join(', ');
+  }, [comfyTrigger, comfyHead, comfyBody, comfyModifiers, comfyAction, comfyParticipants]);
+
+  const handleOpenComfyModal = () => {
     setShowComfyModal(true);
     setComfyError(null);
     setComfyStatus('');
-    setIsComfyContextLoading(true);
 
-    if (currentScene) {
-      // Load context from AI
-      const aiContext = await generateImagePromptContext(state.history, currentScene, activeCharacters, worldInfo);
-      
-      // Collect ONLY aiImagePrompts (Lora tags) from active characters
-      const charPrompts = activeCharacters
-        .map(c => c.aiImagePrompt?.trim() || '')
-        .filter(p => p.length > 0)
-        .join(", ");
+    // Pre-select first character with trigger, or first active character with prompts, or first active character
+    const charWithTrigger = activeCharacters.find(c => !!c.imagePrompts?.trigger?.trim());
+    const charWithAnyPrompt = activeCharacters.find(c => !!c.imagePrompts?.face || !!c.imagePrompts?.clothes || !!c.aiImagePrompt);
+    const initialChar = charWithTrigger || charWithAnyPrompt || (activeCharacters.length > 0 ? activeCharacters[0] : undefined);
 
-      const finalPromptParts = [
-         charPrompts,
-         aiContext,
-         "16:9 wallpaper"
-      ].filter(part => part && part.trim().length > 0);
-
-      setComfyPrompt(finalPromptParts.join(", "));
-    }
-
-    setIsComfyContextLoading(false);
+    populateComfyFieldsForCharacter(initialChar);
+    setComfyModifiers('');
+    setComfyAction('');
+    setComfyParticipants('');
   };
 
   // Logic: Visible characters are strictly those with an imageSrc or any emotion image.
@@ -318,7 +354,7 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
         const width = 1024;
         const height = 576;
 
-        const preparedWorkflow = prepareComfyWorkflow(workflowStr, comfyPrompt, width, height);
+        const preparedWorkflow = prepareComfyWorkflow(workflowStr, finalComfyPrompt, width, height, comfyTrigger);
         
         const base64Data = await generateComfyImage(comfyUrl, preparedWorkflow, (statusMsg) => {
             setComfyStatus(statusMsg);
@@ -811,27 +847,143 @@ export const Player: React.FC<PlayerProps> = ({ scenes, characters, chapters, wo
                   </div>
 
                   <div className="space-y-4">
-                      {/* Prompt Editor */}
-                      {isComfyContextLoading ? (
-                         <div className="flex flex-col items-center justify-center p-6 gap-3">
-                            <Loader2 size={24} className="animate-spin text-purple-400" />
-                            <div className="text-sm text-purple-300">Kontext wird von der KI analysiert...</div>
-                         </div>
-                      ) : (
-                         <div>
-                             <label className="text-xs text-gray-400 font-bold mb-1 block uppercase">Bildbeschreibung (Prompt)</label>
-                             <textarea 
-                                 className="w-full h-32 bg-gray-800 border border-gray-700 rounded p-3 text-white focus:border-purple-500 outline-none resize-none text-sm leading-relaxed font-sans"
-                                 value={comfyPrompt}
-                                 onChange={(e) => setComfyPrompt(e.target.value)}
-                                 placeholder="Beschreibe das Event CG..."
-                                 disabled={isComfyGenerating}
-                             />
-                             <p className="text-[10px] text-gray-500 mt-1">
-                                 Die Beschreibung wurde automatisch aus den Charakter-Settings, der Szenenbeschreibung und der Chat-Historie zusammengebaut. Du kannst sie jetzt noch anpassen.
-                             </p>
-                         </div>
-                      )}
+                      {/* 1. Character Dropdown */}
+                      <div className="bg-gray-800/80 p-3.5 rounded-xl border border-gray-700/80">
+                          <label className="text-xs font-bold text-purple-300 uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
+                              <User size={14} className="text-purple-400" /> Charakter auswählen
+                          </label>
+                          <select
+                              value={comfySelectedCharId}
+                              onChange={(e) => {
+                                  const selected = activeCharacters.find(c => c.id === e.target.value);
+                                  populateComfyFieldsForCharacter(selected);
+                              }}
+                              disabled={isComfyGenerating}
+                              className="w-full bg-gray-900 border border-gray-700 rounded-lg p-2.5 text-white text-xs md:text-sm focus:border-purple-500 outline-none"
+                          >
+                              <option value="">-- Kein Charakter (Standard / Freitext) --</option>
+                              {activeCharacters.map(char => {
+                                  const hasTrigger = !!char.imagePrompts?.trigger?.trim();
+                                  const triggerText = hasTrigger ? ` [LoRA: ${char.imagePrompts?.trigger}]` : '';
+                                  return (
+                                      <option key={char.id} value={char.id}>
+                                          {char.name}{triggerText}
+                                      </option>
+                                  );
+                              })}
+                          </select>
+                          <p className="text-[11px] text-gray-400 mt-1.5">
+                              Die Auswahl lädt automatisch die hinterlegten Charakter-Prompt-Bausteine in die Eingabefelder.
+                          </p>
+                      </div>
+
+                      {/* 2. Editable Building Blocks */}
+                      <div className="bg-gray-800/60 p-4 rounded-xl border border-gray-700/70 space-y-3">
+                          <div className="font-bold text-xs uppercase tracking-wider text-gray-300 border-b border-gray-700/50 pb-1">
+                              Editierbare Prompt-Bausteine
+                          </div>
+
+                          {/* LoRA Trigger Tag */}
+                          <div>
+                              <label className="text-[11px] font-semibold text-gray-400 block mb-1">
+                                  LoRA Trigger:
+                              </label>
+                              <input 
+                                  type="text"
+                                  className="w-full bg-gray-900 border border-gray-700 rounded-lg p-2 text-xs text-purple-200 placeholder-gray-600 focus:border-purple-500 outline-none font-mono"
+                                  value={comfyTrigger}
+                                  onChange={(e) => setComfyTrigger(e.target.value)}
+                                  placeholder="z.B. lstsprk_elr_bs (wird für LoraLoader injiziert)"
+                                  disabled={isComfyGenerating}
+                              />
+                          </div>
+
+                          {/* Kopf (Face + Hair) */}
+                          <div>
+                              <label className="text-[11px] font-semibold text-gray-300 block mb-1">
+                                  Kopf (Gesicht &amp; Frisur):
+                              </label>
+                              <input 
+                                  type="text"
+                                  className="w-full bg-gray-900 border border-gray-700 rounded-lg p-2 text-xs text-white placeholder-gray-500 focus:border-purple-500 outline-none"
+                                  value={comfyHead}
+                                  onChange={(e) => setComfyHead(e.target.value)}
+                                  placeholder="z.B. red_hair, long_hair, blue_eyes, hair_down"
+                                  disabled={isComfyGenerating}
+                              />
+                          </div>
+
+                          {/* Körper (Clothes + BodyType) */}
+                          <div>
+                              <label className="text-[11px] font-semibold text-gray-300 block mb-1">
+                                  Körper (Kleidung &amp; Körperbau):
+                              </label>
+                              <input 
+                                  type="text"
+                                  className="w-full bg-gray-900 border border-gray-700 rounded-lg p-2 text-xs text-white placeholder-gray-500 focus:border-purple-500 outline-none"
+                                  value={comfyBody}
+                                  onChange={(e) => setComfyBody(e.target.value)}
+                                  placeholder="z.B. silver_blue_armor, gauntlets, athletic"
+                                  disabled={isComfyGenerating}
+                              />
+                          </div>
+
+                          {/* Modifikatoren */}
+                          <div>
+                              <label className="text-[11px] font-semibold text-gray-300 block mb-1">
+                                  Modifikatoren:
+                              </label>
+                              <input 
+                                  type="text"
+                                  className="w-full bg-gray-900 border border-gray-700 rounded-lg p-2 text-xs text-white placeholder-gray-500 focus:border-purple-500 outline-none"
+                                  value={comfyModifiers}
+                                  onChange={(e) => setComfyModifiers(e.target.value)}
+                                  placeholder="z.B. blush, closed_eyes, blood_on_face"
+                                  disabled={isComfyGenerating}
+                              />
+                          </div>
+
+                          {/* Aktion */}
+                          <div>
+                              <label className="text-[11px] font-semibold text-gray-300 block mb-1">
+                                  Aktion:
+                              </label>
+                              <input 
+                                  type="text"
+                                  className="w-full bg-gray-900 border border-gray-700 rounded-lg p-2 text-xs text-white placeholder-gray-500 focus:border-purple-500 outline-none"
+                                  value={comfyAction}
+                                  onChange={(e) => setComfyAction(e.target.value)}
+                                  placeholder="z.B. kissing, fighting, sitting"
+                                  disabled={isComfyGenerating}
+                              />
+                          </div>
+
+                          {/* Beteiligte */}
+                          <div>
+                              <label className="text-[11px] font-semibold text-gray-300 block mb-1">
+                                  Beteiligte:
+                              </label>
+                              <input 
+                                  type="text"
+                                  className="w-full bg-gray-900 border border-gray-700 rounded-lg p-2 text-xs text-white placeholder-gray-500 focus:border-purple-500 outline-none"
+                                  value={comfyParticipants}
+                                  onChange={(e) => setComfyParticipants(e.target.value)}
+                                  placeholder="z.B. 1girl, 1boy, solo"
+                                  disabled={isComfyGenerating}
+                              />
+                          </div>
+                      </div>
+
+                      {/* 3. Live Prompt Preview */}
+                      <div className="bg-purple-950/30 p-3.5 rounded-xl border border-purple-600/40">
+                          <label className="text-[11px] font-bold text-purple-300 uppercase tracking-wider block mb-1 flex items-center justify-between">
+                              <span>Vorschau des finalen Prompts (Live)</span>
+                              <span className="text-[10px] text-purple-400 font-normal">Wird an ComfyUI gesendet</span>
+                          </label>
+                          <div className="p-2.5 bg-black/60 rounded-lg border border-purple-900/50 text-xs text-purple-100 font-mono leading-relaxed break-words max-h-24 overflow-y-auto select-all">
+                              {finalComfyPrompt}
+                          </div>
+                      </div>
 
                       {/* Generate / Error Display */}
                       {comfyError && (
